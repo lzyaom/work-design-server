@@ -1,0 +1,57 @@
+[package]
+name = "work_designer_server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web 框架
+axum = { version = "0.7", features = ["ws"] }
+# 异步
+tokio = { version = "1.0", features = ["full"] }
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# 数据库
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "uuid", "chrono", "json", 'sqlite'] }
+# 唯一标识
+uuid = { version = "1.0", features = ["serde", "v4"] }
+# 时间
+chrono = { version = "0.4", features = ["serde"] }
+# 中间件
+tower-http = { version = "0.5", features = ["cors"] }
+# 配置
+config = "0.13"
+dotenv = "0.15"
+# 错误处理
+thiserror = "1.0"
+# 加密
+bcrypt = "0.15"
+jsonwebtoken = "9.2"
+# 邮件
+lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls", "builder"] }
+# Python 
+pyo3 = { version = "0.20", features = ["auto-initialize"] }
+# 系统监控
+cron = "0.12"
+tokio-cron-scheduler = "0.9"
+# 系统监控
+sysinfo = "0.29"
+# 异步
+futures = "0.3"
+# 临时文件
+tempfile = "3.8"
+
+# API 文档
+utoipa = { version = "4.1", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "5.0", features = ["axum"] }
+
+# 指标监控
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+
+# 日志追踪
+tracing = { version = "0.1", features = ["attributes"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
