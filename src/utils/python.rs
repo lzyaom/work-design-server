@@ -21,24 +21,26 @@ impl PythonExecutor {
         let python_code = self.convert_json_to_python(&json_code)?;
 
         // 创建临时文件
-        let mut temp_file = NamedTempFile::new()?;
+        let temp_file = NamedTempFile::new()?;
         fs::write(temp_file.path(), python_code)?;
 
         // 执行 Python 代码
         Python::with_gil(|py| {
             let locals = PyDict::new(py);
-            
+
             // 如果有输入数据，添加到 Python 上下文
             if let Some(data) = input_data {
                 locals.set_item("input_data", data.to_string())?;
             }
 
             // 执行代码并捕获输出
-            match py.run_path(temp_file.path().to_str().unwrap(), Some(locals), None) {
+            let code = fs::read_to_string(temp_file.path())?;
+            match py.run(&code, Some(locals), None) {
                 Ok(_) => {
                     // 获取输出结果
                     if let Ok(result) = locals.get_item("result") {
-                        let result_str = result.to_string();
+                        let result_str = result.map(|s| s.to_string()).unwrap_or("".to_string());
+
                         Ok(serde_json::from_str(&result_str)?)
                     } else {
                         Ok(Value::Null)
@@ -60,4 +62,4 @@ impl PythonExecutor {
             json_code.as_str().unwrap_or("")
         ))
     }
-} 
+}

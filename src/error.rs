@@ -59,9 +59,18 @@ pub enum AppError {
 
     #[error("Invalid user role: {0}")]
     InvalidUserRole(String),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Python error: {0}")]
+    Py(#[from] pyo3::PyErr),
+
     #[error("Job Scheduler error: {0}")]
     JobScheduler(#[from] tokio_cron_scheduler::JobSchedulerError),
 
+    #[error("Json error: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 impl IntoResponse for AppError {
@@ -132,11 +141,32 @@ impl IntoResponse for AppError {
                     "Failed to send email".to_string(),
                 )
             }
+            AppError::Io(ref e) => {
+                error!(error = ?e, "IO error occurred");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An IO error occurred".to_string(),
+                )
+            }
+            AppError::Py(ref e) => {
+                error!(error = ?e, "Python error occurred");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "A Python error occurred".to_string(),
+                )
+            }
             AppError::JobScheduler(ref e) => {
                 error!(error =?e, "Job scheduler error occurred");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "A Jog scheduler error occurred".to_string(),
+                )
+            }
+            AppError::Json(ref e) => {
+                error!(error = ?e, "Json error occurred");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "A Json error occurred".to_string(),
                 )
             }
         };
