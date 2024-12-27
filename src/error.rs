@@ -33,6 +33,12 @@ pub enum AppError {
     #[error("Email error: {0}")]
     Email(#[from] lettre::error::Error),
 
+    #[error("Email address error: {0}")]
+    EmailAddress(#[from] lettre::address::AddressError),
+
+    #[error("Email send error: {0}")]
+    EmailSend(#[from] lettre::transport::smtp::Error),
+
     #[error("Python execution error: {0}")]
     Python(String),
 
@@ -87,6 +93,13 @@ impl IntoResponse for AppError {
                     "Failed to send email".to_string(),
                 )
             }
+            AppError::EmailAddress(ref e) => {
+                error!(error = ?e, "Email address error occurred");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to parse email address".to_string(),
+                )
+            }
             AppError::Python(msg) => {
                 error!(error = %msg, "Python execution error occurred");
                 (
@@ -109,6 +122,13 @@ impl IntoResponse for AppError {
             AppError::InvalidValue(ref msg) => (StatusCode::BAD_REQUEST, msg.to_string()),
             AppError::InvalidLogLevel(ref msg) => (StatusCode::BAD_REQUEST, msg.to_string()),
             AppError::InvalidUserRole(ref msg) => (StatusCode::BAD_REQUEST, msg.to_string()),
+            AppError::EmailSend(ref e) => {
+                error!(error = ?e, "Email send error occurred");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to send email".to_string(),
+                )
+            }
         };
 
         let body = Json(json!({

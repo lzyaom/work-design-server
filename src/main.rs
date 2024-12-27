@@ -34,10 +34,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 初始化邮件服务
     let email_service = EmailService::new(
-        config.smtp_host.clone(),
-        config.smtp_username.clone(),
-        config.smtp_password.clone(),
-        format!("noreply@{}", config.smtp_host.clone()),
+        &config.smtp_host,
+        &config.smtp_username,
+        &config.smtp_password,
+        format!("noreply@{}", &config.smtp_host),
     )?;
 
     // 初始化 Python 执行器

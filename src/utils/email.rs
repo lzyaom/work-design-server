@@ -12,12 +12,12 @@ pub struct EmailService {
 
 impl EmailService {
     pub fn new(
-        smtp_host: String,
-        smtp_username: String,
-        smtp_password: String,
+        smtp_host: &str,
+        smtp_username: &str,
+        smtp_password: &str,
         from_address: String,
     ) -> Result<Self, AppError> {
-        let creds = Credentials::new(smtp_username, smtp_password);
+        let creds = Credentials::new(smtp_username.to_string(), smtp_password.to_string());
 
         let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)?
             .credentials(creds)
@@ -39,7 +39,7 @@ impl EmailService {
             .from(self.from_address.parse()?)
             .to(to.parse()?)
             .subject(subject)
-            .header(ContentType::TEXT_HTML.into())
+            .header(ContentType::TEXT_HTML)
             .body(html_content.to_string())?;
 
         self.smtp_transport.send(email).await?;
