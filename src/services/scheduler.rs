@@ -1,11 +1,11 @@
 use crate::{error::AppError, models::task::ScheduledTask, models::task::TaskType};
+use chrono::{DateTime, Utc};
+use serde_json::Value;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use serde_json::Value;
 pub struct Scheduler {
     scheduler: JobScheduler,
     pool: SqlitePool,
@@ -37,8 +37,8 @@ impl Scheduler {
 
     pub async fn add_task(&mut self, task: ScheduledTask) -> Result<(), AppError> {
         let pool = self.pool.clone();
-        let job = Job::new_async(task.cron_expression.as_str(), move |_uuid, _l| {
-            let pool = pool.clone();
+        let job = Job::new_async(task.clone().cron_expression.as_str(), move |_uuid, _l| {
+            let _pool = pool.clone();
             let task = task.clone();
             Box::pin(async move {
                 match task.task_type {
@@ -51,7 +51,7 @@ impl Scheduler {
                     TaskType::SystemCleanup => {
                         // 处理系统清理任务
                     }
-                    TaskType::Custom(ref name) => {
+                    TaskType::Custom(ref _name) => {
                         // 处理自定义任务
                     }
                 }

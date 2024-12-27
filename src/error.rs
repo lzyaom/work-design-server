@@ -59,6 +59,9 @@ pub enum AppError {
 
     #[error("Invalid user role: {0}")]
     InvalidUserRole(String),
+    #[error("Job Scheduler error: {0}")]
+    JobScheduler(#[from] tokio_cron_scheduler::JobSchedulerError),
+
 }
 
 impl IntoResponse for AppError {
@@ -127,6 +130,13 @@ impl IntoResponse for AppError {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to send email".to_string(),
+                )
+            }
+            AppError::JobScheduler(ref e) => {
+                error!(error =?e, "Job scheduler error occurred");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "A Jog scheduler error occurred".to_string(),
                 )
             }
         };
