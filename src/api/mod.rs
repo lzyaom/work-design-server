@@ -80,5 +80,6 @@ fn api_router(
             "/documents/:id/permissions",
             post(documents::update_permissions),
         )
+        .route("/monitor", get(monitor::get_status))
         .with_state(state.0)
 }
