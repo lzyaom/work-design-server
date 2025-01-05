@@ -15,6 +15,7 @@ pub async fn get_user_by_id(pool: &SqlitePool, id: Uuid) -> Result<User, AppErro
             username,
             role as "role: String",
             is_active,
+            avatar,
             created_at as "created_at: DateTime<Utc>",
             updated_at as "updated_at: DateTime<Utc>"
         FROM users 
@@ -38,6 +39,7 @@ pub async fn list_users(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Ve
             username,
             role,
             is_active,
+            avatar,
             created_at as "created_at: DateTime<Utc>",
             updated_at as "updated_at: DateTime<Utc>"
         FROM users 
@@ -57,12 +59,14 @@ pub async fn update_user(
     id: Uuid,
     username: Option<String>,
     email: Option<String>,
+    avatar: Option<String>,
 ) -> Result<User, AppError> {
     let mut transaction: Transaction<'_, sqlx::Sqlite> = pool.begin().await?;
     sqlx::query!(
-        "UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email),updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email), avatar = COALESCE(?, avatar), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         username,
         email,
+        avatar,
         id
     )
     .execute(&mut *transaction)
@@ -70,7 +74,7 @@ pub async fn update_user(
 
     let user = sqlx::query_as!(
         User,
-        r#"SELECT id as "id: Uuid", password_salt, email, username, role, is_active, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE id = ?"#,
+        r#"SELECT id as "id: Uuid", password_salt, email, username, role, is_active, avatar, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE id = ?"#,
         id
     )
     .fetch_one(&mut *transaction)
@@ -96,12 +100,13 @@ pub async fn create_user(pool: &SqlitePool, user: User) -> Result<User, AppError
     let role_str = user.role.to_string();
     let user = sqlx::query_as!(
         User,
-        r#"INSERT INTO users (id, email, password_salt, username, role) VALUES (?, ?, ?, ?, ?) RETURNING id as "id: Uuid", email, password_salt, username, role as "role: String", is_active, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" "#,
+        r#"INSERT INTO users (id, email, password_salt, username, role, avatar) VALUES (?, ?, ?, ?, ?, ?) RETURNING id as "id: Uuid", email, password_salt, username, role as "role: String", is_active, avatar, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" "#,
         user.id,
         user.email,
         user.password_salt,
         user.username,
-        role_str
+        role_str,
+        user.avatar
     )
     .fetch_one(pool)
     .await?;
@@ -120,7 +125,7 @@ pub async fn check_email_exists(pool: &SqlitePool, email: &str) -> Result<bool, 
 pub async fn get_user_by_email(pool: &SqlitePool, email: &str) -> Result<User, AppError> {
     let user = sqlx::query_as!(
         User,
-        r#"SELECT id as "id: Uuid", email, password_salt, username, role, is_active, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE email = ?"#,
+        r#"SELECT id as "id: Uuid", email, password_salt, username, role, is_active, avatar, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE email = ?"#,
         email
     )
     .fetch_optional(pool)

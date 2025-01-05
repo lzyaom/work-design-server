@@ -74,6 +74,7 @@ pub async fn register(
             username: Some(req.name),
             role: UserRole::User,
             is_active: 1,
+            avatar: None,
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),
         },

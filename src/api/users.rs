@@ -18,6 +18,7 @@ pub struct ListUsersQuery {
 pub struct UpdateUserRequest {
     name: Option<String>,
     email: Option<String>,
+    avatar: Option<String>,
 }
 
 pub async fn list_users(
@@ -51,7 +52,7 @@ pub async fn update_user(
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
 
-    let user = user::update_user(&pool, id, req.name, req.email).await?;
+    let user = user::update_user(&pool, id, req.name, req.email, req.avatar).await?;
     Ok(Json(user))
 }
 

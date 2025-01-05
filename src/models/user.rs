@@ -42,6 +42,7 @@ pub struct User {
     pub username: Option<String>,
     pub role: UserRole,
     pub is_active: i64,
+    pub avatar: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
