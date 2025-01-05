@@ -1,4 +1,5 @@
 use crate::{
+    config::CONFIG,
     error::AppError,
     middleware::auth::Claims,
     models::user::{User, UserRole},
@@ -116,8 +117,7 @@ fn create_token(user_id: &str, role: &str) -> Result<String, AppError> {
         role: role.to_string(),
         exp: expiration,
     };
-
-    let key = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+    let key = &CONFIG.get().unwrap().jwt_secret;
     let token = encode(
         &Header::default(),
         &claims,

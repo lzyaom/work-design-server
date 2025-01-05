@@ -9,6 +9,8 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::config::CONFIG;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,  // user_id
@@ -51,8 +53,7 @@ where
         }
 
         let token = &auth_header["Bearer ".len()..];
-
-        let key = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+        let key = &CONFIG.get().unwrap().jwt_secret;
         let claims = match decode::<Claims>(
             token,
             &DecodingKey::from_secret(key.as_bytes()),

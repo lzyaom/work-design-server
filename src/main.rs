@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::load_config()?;
 
     // 初始化数据库连接
-    let pool = db::init_db_sqlite(config.database_url).await?;
+    let pool = db::init_db_sqlite(&config.database_url).await?;
 
     // 初始化邮件服务
     let email_service = EmailService::new(

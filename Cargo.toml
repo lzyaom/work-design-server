@@ -53,5 +53,8 @@ metrics-exporter-prometheus = "0.13"
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
+# once_cell
+once_cell = "1.19"
+
 [dev-dependencies]
 tokio-test = "0.4"
