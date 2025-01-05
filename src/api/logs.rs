@@ -10,7 +10,10 @@ use uuid::Uuid;
 use crate::{
     error::AppError,
     middleware::auth::AuthUser,
-    models::log::{Log, LogLevel},
+    models::{
+        log::{Log, LogLevel},
+        user::UserRole,
+    },
     services::log,
 };
 
@@ -32,13 +35,14 @@ pub async fn list_logs(
     Query(query): Query<ListLogsQuery>,
 ) -> Result<Json<Vec<Log>>, AppError> {
     // 检查权限
-    if auth.role != "admin" {
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
 
     let logs = log::list_logs(
         &pool,
-        query.limit.unwrap_or(100),
+        query.limit.unwrap_or(10),
         query.offset.unwrap_or(0),
         query.level,
     )
@@ -53,7 +57,8 @@ pub async fn delete_old_logs(
     Query(query): Query<DeleteLogsQuery>,
 ) -> Result<Json<u64>, AppError> {
     // 检查权限
-    if auth.role != "admin" {
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
 
@@ -66,7 +71,9 @@ pub async fn get_log(
     State(pool): State<SqlitePool>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Log>, AppError> {
-    if auth.role != "admin" {
+    // 检查权限
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 

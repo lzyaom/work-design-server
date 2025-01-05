@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::{
     error::AppError,
     middleware::auth::AuthUser,
-    models::document::{Document, PermissionType},
+    models::{document::{Document, PermissionType}, user::UserRole},
     services::document,
 };
 
@@ -92,7 +92,9 @@ pub async fn delete_document(
     State(pool): State<SqlitePool>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<()>, AppError> {
-    if auth.role != "admin" {
+    // 检查权限
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
@@ -104,7 +106,8 @@ pub async fn list_documents(
     auth: AuthUser,
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Document>>, AppError> {
-    if auth.role != "admin" {
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 

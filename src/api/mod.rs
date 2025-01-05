@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
-    middleware::monitor::track_metrics,
+    middleware::{monitor::track_metrics, require_auth},
     services::broadcast::DocumentBroadcaster,
     utils::{email::EmailService, python::PythonExecutor},
 };
@@ -38,6 +38,7 @@ pub fn create_router(
             api_router((pool, email_service, python_executor, broadcaster)),
         )
         .layer(cors)
+        .layer(from_fn(require_auth))
         .layer(from_fn(track_metrics))
         .fallback(crate::handlers::handle_404)
 }

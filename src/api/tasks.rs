@@ -9,7 +9,10 @@ use uuid::Uuid;
 use crate::{
     error::AppError,
     middleware::auth::AuthUser,
-    models::task::{ScheduledTask, TaskType},
+    models::{
+        task::{ScheduledTask, TaskType},
+        user::UserRole,
+    },
     services::task,
 };
 
@@ -39,7 +42,8 @@ pub async fn task_list(
     State(pool): State<SqlitePool>,
     Query(query): Query<ListTasksQuery>,
 ) -> Result<Json<Vec<ScheduledTask>>, AppError> {
-    if auth.role != "admin" {
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
@@ -55,7 +59,8 @@ pub async fn create_task(
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<Json<ScheduledTask>, AppError> {
     // 检查权限
-    if auth.role != "admin" {
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
@@ -78,7 +83,8 @@ pub async fn update_task(
     Json(req): Json<UpdateTaskRequest>,
 ) -> Result<Json<ScheduledTask>, AppError> {
     // 检查权限
-    if auth.role != "admin" {
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
@@ -101,7 +107,8 @@ pub async fn delete_task(
     Path(id): Path<Uuid>,
 ) -> Result<Json<()>, AppError> {
     // 检查权限
-    if auth.role != "admin" {
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
@@ -109,13 +116,14 @@ pub async fn delete_task(
     Ok(Json(()))
 }
 
-
 pub async fn get_task(
     auth: AuthUser,
     State(pool): State<SqlitePool>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ScheduledTask>, AppError> {
-    if auth.role != "admin" {
+    // 检查权限
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 

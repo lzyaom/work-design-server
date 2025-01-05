@@ -6,7 +6,12 @@ use serde::Deserialize;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use crate::{error::AppError, middleware::auth::AuthUser, models::user::User, services::user};
+use crate::{
+    error::AppError,
+    middleware::auth::AuthUser,
+    models::user::{User, UserRole},
+    services::user,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ListUsersQuery {
@@ -22,10 +27,16 @@ pub struct UpdateUserRequest {
 }
 
 pub async fn list_users(
-    _auth: AuthUser,
+    auth: AuthUser,
     State(pool): State<SqlitePool>,
     Query(query): Query<ListUsersQuery>,
 ) -> Result<Json<Vec<User>>, AppError> {
+    // 检查权限
+    let role = UserRole::from(auth.role);
+    if role != UserRole::Admin {
+        return Err(AppError::Auth("Unauthorized".to_string()));
+    }
+
     let users =
         user::list_users(&pool, query.limit.unwrap_or(10), query.offset.unwrap_or(0)).await?;
 
@@ -33,10 +44,14 @@ pub async fn list_users(
 }
 
 pub async fn get_user(
-    _auth: AuthUser,
+    auth: AuthUser,
     State(pool): State<SqlitePool>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<User>, AppError> {
+    // 检查权限
+    if auth.user_id != id {
+        return Err(AppError::Auth("Unauthorized".to_string()));
+    }
     let user = user::get_user_by_id(&pool, id).await?;
     Ok(Json(user))
 }
@@ -48,7 +63,7 @@ pub async fn update_user(
     Json(req): Json<UpdateUserRequest>,
 ) -> Result<Json<User>, AppError> {
     // 检查权限
-    if auth.user_id != id && auth.role != "admin" {
+    if auth.user_id != id {
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
 
@@ -62,7 +77,8 @@ pub async fn delete_user(
     Path(id): Path<Uuid>,
 ) -> Result<(), AppError> {
     // 检查权限
-    if auth.user_id != id && auth.role != "admin" {
+    let role = UserRole::from(auth.role);
+    if auth.user_id != id && role != UserRole::Admin {
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
 
