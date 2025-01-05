@@ -108,3 +108,24 @@ pub async fn create_user(pool: &SqlitePool, user: User) -> Result<User, AppError
 
     Ok(user)
 }
+
+pub async fn check_email_exists(pool: &SqlitePool, email: &str) -> Result<bool, AppError> {
+    let result = sqlx::query!("SELECT COUNT(*) as count FROM users WHERE email = ?", email)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(result.count > 0)
+}
+
+pub async fn get_user_by_email(pool: &SqlitePool, email: &str) -> Result<User, AppError> {
+    let user = sqlx::query_as!(
+        User,
+        r#"SELECT id as "id: Uuid", email, password_salt, username, role, is_active, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE email = ?"#,
+        email
+    )
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    Ok(user)
+}
