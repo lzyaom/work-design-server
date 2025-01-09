@@ -1,12 +1,13 @@
 use axum::{
     extract::{Path, Query, State},
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
-use sqlx::SqlitePool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
+    api::AppState,
     error::AppError,
     middleware::auth::AuthUser,
     models::{
@@ -39,7 +40,7 @@ pub struct UpdateTaskRequest {
 }
 pub async fn task_list(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Query(query): Query<ListTasksQuery>,
 ) -> Result<Json<Vec<ScheduledTask>>, AppError> {
     let role = UserRole::from(auth.role);
@@ -47,15 +48,19 @@ pub async fn task_list(
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
-    let tasks =
-        task::list_tasks(&pool, query.limit.unwrap_or(100), query.offset.unwrap_or(0)).await?;
+    let tasks = task::list_tasks(
+        &state.pool,
+        query.limit.unwrap_or(100),
+        query.offset.unwrap_or(0),
+    )
+    .await?;
 
     Ok(Json(tasks))
 }
 
 pub async fn create_task(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<Json<ScheduledTask>, AppError> {
     // 检查权限
@@ -65,7 +70,7 @@ pub async fn create_task(
     }
 
     let task = task::create_task(
-        &pool,
+        &state.pool,
         req.name,
         req.cron_expression,
         req.task_type,
@@ -78,7 +83,7 @@ pub async fn create_task(
 
 pub async fn update_task(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateTaskRequest>,
 ) -> Result<Json<ScheduledTask>, AppError> {
@@ -103,7 +108,7 @@ pub async fn update_task(
 
 pub async fn delete_task(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<()>, AppError> {
     // 检查权限
@@ -112,13 +117,13 @@ pub async fn delete_task(
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
-    task::delete_task(&pool, id).await?;
+    task::delete_task(&state.pool, id).await?;
     Ok(Json(()))
 }
 
 pub async fn get_task(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ScheduledTask>, AppError> {
     // 检查权限
@@ -127,6 +132,6 @@ pub async fn get_task(
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
-    let task = task::get_task(&pool, id).await?;
+    let task = task::get_task(&state.pool, id).await?;
     Ok(Json(task))
 }

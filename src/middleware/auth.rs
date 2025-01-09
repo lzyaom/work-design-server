@@ -9,7 +9,7 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::config::CONFIG;
+use crate::config::Config;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -31,7 +31,7 @@ where
 {
     type Rejection = Response;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let auth_header = parts
             .headers
             .get("Authorization")
@@ -53,7 +53,7 @@ where
         }
 
         let token = &auth_header["Bearer ".len()..];
-        let key = &CONFIG.get().unwrap().jwt_secret;
+        let key = &state.config.jwt_secret;
         let claims = match decode::<Claims>(
             token,
             &DecodingKey::from_secret(key.as_bytes()),

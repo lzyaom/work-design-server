@@ -1,15 +1,19 @@
 use axum::{
     extract::{Path, State},
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
-use sqlx::SqlitePool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
+    api::AppState,
     error::AppError,
     middleware::auth::AuthUser,
-    models::{document::{Document, PermissionType}, user::UserRole},
+    models::{
+        document::{Document, PermissionType},
+        user::UserRole,
+    },
     services::document,
 };
 
@@ -33,30 +37,33 @@ pub struct UpdatePermissionRequest {
 
 pub async fn create_document(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<CreateDocumentRequest>,
 ) -> Result<Json<Document>, AppError> {
-    let document = document::create_document(&pool, req.title, req.content, auth.user_id).await?;
+    let document =
+        document::create_document(&state.pool, req.title, req.content, auth.user_id).await?;
     Ok(Json(document))
 }
 
 pub async fn get_document(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Document>, AppError> {
-    let (document, _) = document::get_document_with_permission(&pool, id, auth.user_id).await?;
+    let (document, _) =
+        document::get_document_with_permission(&state.pool, id, auth.user_id).await?;
     Ok(Json(document))
 }
 
 pub async fn update_document(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateDocumentRequest>,
 ) -> Result<Json<Document>, AppError> {
     // 检查权限
-    let (_, permission) = document::get_document_with_permission(&pool, id, auth.user_id).await?;
+    let (_, permission) =
+        document::get_document_with_permission(&state.pool, id, auth.user_id).await?;
 
     if permission.is_none() {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
@@ -66,30 +73,31 @@ pub async fn update_document(
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
-    let document = document::update_document(&pool, id, req.title, req.content).await?;
+    let document = document::update_document(&state.pool, id, req.title, req.content).await?;
     Ok(Json(document))
 }
 
 pub async fn update_permissions(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdatePermissionRequest>,
 ) -> Result<Json<()>, AppError> {
     // 检查权限
     let (document, permission) =
-        document::get_document_with_permission(&pool, id, auth.user_id).await?;
+        document::get_document_with_permission(&state.pool, id, auth.user_id).await?;
     if document.owner_id != auth.user_id && permission.is_none() {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
-    document::add_document_permission(&pool, id, req.user_id, req.permission_type, None).await?;
+    document::add_document_permission(&state.pool, id, req.user_id, req.permission_type, None)
+        .await?;
     Ok(Json(()))
 }
 
 pub async fn delete_document(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<()>, AppError> {
     // 检查权限
@@ -98,19 +106,19 @@ pub async fn delete_document(
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
-    document::delete_document(&pool, id).await?;
+    document::delete_document(&state.pool, id).await?;
     Ok(Json(()))
 }
 
 pub async fn list_documents(
     auth: AuthUser,
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
 ) -> Result<Json<Vec<Document>>, AppError> {
     let role = UserRole::from(auth.role);
     if role != UserRole::Admin {
         return Err(AppError::Auth("Insufficient permissions".to_string()));
     }
 
-    let documents = document::list_documents(&pool).await?;
+    let documents = document::list_documents(&state.pool).await?;
     Ok(Json(documents))
 }

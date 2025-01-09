@@ -1,6 +1,5 @@
 use config::{Config as ConfigBuilder, ConfigError};
 use dotenv::dotenv;
-use once_cell::sync::OnceCell;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -26,12 +25,7 @@ impl Config {
     }
 }
 
-// 定义全局配置
-pub static CONFIG: OnceCell<Config> = OnceCell::new();
-
 pub fn load_config() -> Result<Config, config::ConfigError> {
     let config = Config::from_env()?;
-    // 初始化全局配置
-    CONFIG.set(config.clone()).unwrap();
     Ok(config)
 }

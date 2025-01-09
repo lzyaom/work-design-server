@@ -15,42 +15,37 @@ use crate::{
 
 mod auth;
 mod documents;
+mod email;
 mod logs;
 mod monitor;
 mod tasks;
 mod users;
 mod websocket;
 
-pub fn create_router(
-    pool: SqlitePool,
-    email_service: EmailService,
-    python_executor: PythonExecutor,
-    broadcaster: Arc<DocumentBroadcaster>,
-) -> Router {
+pub struct AppState {
+    pub config: Config,
+    pub pool: SqlitePool,
+    pub email_service: EmailService,
+    pub python_executor: PythonExecutor,
+    pub broadcaster: Arc<DocumentBroadcaster>,
+}
+
+pub fn create_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
     Router::new()
-        .nest(
-            "/api/v1",
-            api_router((pool, email_service, python_executor, broadcaster)),
-        )
+        .nest("/api/v1", api_router())
         .layer(cors)
         .layer(from_fn(require_auth))
         .layer(from_fn(track_metrics))
+        .layer(AddExtensionLayer::new(Arc::new(state)))
         .fallback(crate::handlers::handle_404)
 }
 
-fn api_router(
-    state: (
-        SqlitePool,
-        EmailService,
-        PythonExecutor,
-        Arc<DocumentBroadcaster>,
-    ),
-) -> Router {
+fn api_router() -> Router {
     Router::new()
         // 认证路由
         .route("/auth/login", post(auth::login))
@@ -60,6 +55,9 @@ fn api_router(
         .route("/users/:id", get(users::get_user))
         .route("/users/:id", put(users::update_user))
         .route("/users/:id", delete(users::delete_user))
+        // 邮件路由
+        .route("/email/send", post(email::send_email))
+        .route("/email/verify", post(email::verify_email))
         // 日志路由
         .route("/logs", get(logs::list_logs))
         .route("/logs/:id", get(logs::get_log))
@@ -81,5 +79,4 @@ fn api_router(
             post(documents::update_permissions),
         )
         .route("/monitor", get(monitor::get_status))
-        .with_state(state.0)
 }

@@ -1,15 +1,16 @@
 use axum::{
-    extract::{Path, State, WebSocketUpgrade},
+    extract::{Path, WebSocketUpgrade},
     response::IntoResponse,
+    Extension,
 };
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
+    api::AppState,
     middleware::auth::AuthUser,
     models::document::Document,
     services::{
@@ -29,14 +30,14 @@ enum Message {
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Path(document_id): Path<Uuid>,
-    State((pool, broadcaster)): State<(SqlitePool, Arc<DocumentBroadcaster>)>,
+    Extension(state): Extension<Arc<AppState>>,
     auth: AuthUser,
 ) -> impl IntoResponse {
     if let Ok((document, _permission)) =
-        get_document_with_permission(&pool, document_id, auth.user_id).await
+        get_document_with_permission(&state.pool, document_id, auth.user_id).await
     {
-        let sender = broadcaster.get_or_create_channel(document_id).await;
-        ws.on_upgrade(move |socket| handle_socket(socket, document, auth, pool, sender))
+        let sender = state.broadcaster.get_or_create_channel(document_id).await;
+        ws.on_upgrade(move |socket| handle_socket(socket, document, auth, state, sender))
     } else {
         ws.on_upgrade(|socket| async {
             let (mut sender, _) = socket.split();
@@ -56,7 +57,7 @@ async fn handle_socket(
     socket: axum::extract::ws::WebSocket,
     document: Document,
     auth: AuthUser,
-    pool: SqlitePool,
+    Extension(state): Extension<Arc<AppState>>,
     broadcast_sender: broadcast::Sender<DocumentUpdate>,
 ) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
@@ -90,7 +91,8 @@ async fn handle_socket(
                     Message::Update { content } => {
                         // 更新文档
                         if let Ok(_) =
-                            update_document(&pool, document.id, None, Some(content.clone())).await
+                            update_document(&state.pool, document.id, None, Some(content.clone()))
+                                .await
                         {
                             // 广播更新到其他连接
                             let update = DocumentUpdate {

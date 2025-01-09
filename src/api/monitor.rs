@@ -1,12 +1,15 @@
 use crate::{
-    error::AppError, middleware::auth::AuthUser, models::user::UserRole, services::monitor::{get_system_status, SystemStatus}
+    api::AppState,
+    error::AppError,
+    middleware::auth::AuthUser,
+    models::user::UserRole,
+    services::monitor::{get_system_status, SystemStatus},
 };
-use axum::{extract::State, Json};
-use sqlx::SqlitePool;
-
+use axum::{extract::Extension, Json};
+use std::sync::Arc;
 pub async fn get_status(
     auth: AuthUser,
-    State(_pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
 ) -> Result<Json<SystemStatus>, AppError> {
     // 检查权限
     let role = UserRole::from(auth.role);

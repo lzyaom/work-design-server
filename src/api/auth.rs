@@ -1,15 +1,16 @@
 use crate::{
-    config::CONFIG,
+    api::AppState,
+    config::Config,
     error::AppError,
     middleware::auth::Claims,
     models::user::{User, UserRole},
     services::user,
 };
-use axum::{extract::State, Json};
+use axum::{extract::State, Extension, Json};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -32,10 +33,10 @@ pub struct RegisterRequest {
 }
 
 pub async fn login(
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
-    let mut user = user::get_user_by_email(&pool, &req.email).await?;
+    let mut user = user::get_user_by_email(&state.pool, &req.email).await?;
 
     if !verify(&req.password, &user.password_salt.unwrap())? {
         return Err(AppError::Auth("Invalid credentials".to_string()));
@@ -53,11 +54,11 @@ pub async fn login(
 }
 
 pub async fn register(
-    State(pool): State<SqlitePool>,
+    Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
     // 检查邮箱是否已存在
-    let exists = user::check_email_exists(&pool, &req.email).await?;
+    let exists = user::check_email_exists(&state.pool, &req.email).await?;
 
     if exists {
         return Err(AppError::Validation("Email already exists".to_string()));
@@ -66,7 +67,7 @@ pub async fn register(
     let password_salt = hash(req.password.as_bytes(), DEFAULT_COST)?;
     let user_id = Uuid::new_v4();
     let user = user::create_user(
-        &pool,
+        &state.pool,
         User {
             id: user_id,
             email: req.email,
@@ -103,7 +104,7 @@ fn create_token(user_id: &str, role: &str) -> Result<String, AppError> {
         role: role.to_string(),
         exp: expiration,
     };
-    let key = &CONFIG.get().unwrap().jwt_secret;
+    let key = &state.config.jwt_secret;
     let token = encode(
         &Header::default(),
         &claims,

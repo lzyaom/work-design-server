@@ -69,12 +69,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(scheduler_lock);
 
     // 创建应用路由
-    let app = api::create_router(
-        pool.clone(),
-        email_service,
-        python_executor,
-        broadcaster.clone(),
-    );
+    let app = api::create_router(AppState {
+        pool: &pool,
+        email_service: &email_service,
+        python_executor: &python_executor,
+        broadcaster: &broadcaster,
+        config: &config,
+    });
 
     // 启动服务器
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], config.server_port));
