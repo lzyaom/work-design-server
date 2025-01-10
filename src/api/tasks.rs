@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     Extension, Json,
 };
 use serde::Deserialize;
@@ -94,7 +94,7 @@ pub async fn update_task(
     }
 
     let task = task::update_task(
-        &pool,
+        &state.pool,
         id,
         req.name,
         req.cron_expression,

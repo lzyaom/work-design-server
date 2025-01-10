@@ -1,3 +1,4 @@
+use api::AppState;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod api;
@@ -70,11 +71,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 创建应用路由
     let app = api::create_router(AppState {
-        pool: &pool,
-        email_service: &email_service,
-        python_executor: &python_executor,
-        broadcaster: &broadcaster,
-        config: &config,
+        pool: pool.clone(),
+        email_service,
+        python_executor,
+        broadcaster: broadcaster.clone(),
+        config: config.clone(),
     });
 
     // 启动服务器

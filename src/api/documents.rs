@@ -1,7 +1,4 @@
-use axum::{
-    extract::{Path, State},
-    Extension, Json,
-};
+use axum::{extract::Path, Extension, Json};
 use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;

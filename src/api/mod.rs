@@ -1,13 +1,14 @@
 use axum::{
     middleware::from_fn,
     routing::{delete, get, post, put},
-    Router,
+    Extension, Router,
 };
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
+    config::Config,
     middleware::{monitor::track_metrics, require_auth},
     services::broadcast::DocumentBroadcaster,
     utils::{email::EmailService, python::PythonExecutor},
@@ -41,7 +42,7 @@ pub fn create_router(state: AppState) -> Router {
         .layer(cors)
         .layer(from_fn(require_auth))
         .layer(from_fn(track_metrics))
-        .layer(AddExtensionLayer::new(Arc::new(state)))
+        .layer(Extension(Arc::new(state)))
         .fallback(crate::handlers::handle_404)
 }
 

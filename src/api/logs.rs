@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     Extension, Json,
 };
 use chrono::{DateTime, Utc};

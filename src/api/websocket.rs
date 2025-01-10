@@ -14,7 +14,7 @@ use crate::{
     middleware::auth::AuthUser,
     models::document::Document,
     services::{
-        broadcast::{DocumentBroadcaster, DocumentUpdate},
+        broadcast::DocumentUpdate,
         document::{get_document_with_permission, update_document},
     },
 };
@@ -37,7 +37,7 @@ pub async fn ws_handler(
         get_document_with_permission(&state.pool, document_id, auth.user_id).await
     {
         let sender = state.broadcaster.get_or_create_channel(document_id).await;
-        ws.on_upgrade(move |socket| handle_socket(socket, document, auth, state, sender))
+        ws.on_upgrade(move |socket| handle_socket(socket, document, auth, state.clone(), sender))
     } else {
         ws.on_upgrade(|socket| async {
             let (mut sender, _) = socket.split();
@@ -57,7 +57,7 @@ async fn handle_socket(
     socket: axum::extract::ws::WebSocket,
     document: Document,
     auth: AuthUser,
-    Extension(state): Extension<Arc<AppState>>,
+    state: Arc<AppState>,
     broadcast_sender: broadcast::Sender<DocumentUpdate>,
 ) {
     let (mut ws_sender, mut ws_receiver) = socket.split();

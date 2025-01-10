@@ -9,7 +9,7 @@ use axum::{extract::Extension, Json};
 use std::sync::Arc;
 pub async fn get_status(
     auth: AuthUser,
-    Extension(state): Extension<Arc<AppState>>,
+    Extension(_state): Extension<Arc<AppState>>,
 ) -> Result<Json<SystemStatus>, AppError> {
     // 检查权限
     let role = UserRole::from(auth.role);

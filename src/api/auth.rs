@@ -1,12 +1,11 @@
 use crate::{
     api::AppState,
-    config::Config,
     error::AppError,
     middleware::auth::Claims,
     models::user::{User, UserRole},
     services::user,
 };
-use axum::{extract::State, Extension, Json};
+use axum::{Extension, Json};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
@@ -42,7 +41,7 @@ pub async fn login(
         return Err(AppError::Auth("Invalid credentials".to_string()));
     }
     user.is_active = 1; // 修改用户在线状态
-    let token = create_token(&user.id.to_string(), &user.role.to_string())?;
+    let token = create_token(&state, &user.id.to_string(), &user.role.to_string())?;
 
     Ok(Json(LoginResponse {
         token,
@@ -82,7 +81,7 @@ pub async fn register(
     )
     .await?;
 
-    let token = create_token(&user_id.to_string(), &user.role.to_string())?;
+    let token = create_token(&state, &user_id.to_string(), &user.role.to_string())?;
 
     Ok(Json(LoginResponse {
         token,
@@ -93,7 +92,7 @@ pub async fn register(
     }))
 }
 
-fn create_token(user_id: &str, role: &str) -> Result<String, AppError> {
+fn create_token(state: &AppState, user_id: &str, role: &str) -> Result<String, AppError> {
     let expiration = chrono::Utc::now()
         .checked_add_signed(chrono::Duration::hours(24))
         .expect("valid timestamp")
