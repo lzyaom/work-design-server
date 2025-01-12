@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum ProgramStatus {
     Pending,
     Compiling,
@@ -64,10 +64,27 @@ pub struct ProgramCompileResponse {
 pub struct ProgramRequest {
     pub name: String,
     pub content: Option<String>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ProgramResponse {
-    pub code: i64,
-    pub message: String,
+    pub code: i32,
+    pub message: Option<String>,
+    pub result: Option<Program>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ProgramExecutionUpdate {
+    pub program_id: Uuid,
+    pub line_number: i32,
+    pub output: Option<String>,
+    pub error: Option<String>,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListProgramsQuery {
+    pub limit: i64,
+    pub offset: i64,
 }

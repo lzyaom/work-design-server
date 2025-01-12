@@ -1,129 +1,125 @@
-use crate::models::program::*;
-use crate::{error::AppError, middleware::auth::AuthUser, AppState};
-use axum::extract::Path;
+use axum::extract::{ws::Message, Path, Query, WebSocketUpgrade};
+use axum::response::IntoResponse;
 use axum::{Extension, Json};
+use futures::{SinkExt, StreamExt};
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::models::program::*;
+use crate::services::program::{self, ProgramService};
+use crate::{error::AppError, middleware::auth::AuthUser, AppState};
+
 pub async fn list_programs(
     _auth: AuthUser,
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
+    Query(query): Query<ListProgramsQuery>,
 ) -> Result<Json<Vec<Program>>, AppError> {
-    Ok(Json(vec![]))
+    let programs = program::list_programs(&state.pool, query.limit, query.offset).await?;
+    Ok(Json(programs))
 }
 
 pub async fn create_program(
     auth: AuthUser,
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<ProgramRequest>,
 ) -> Result<Json<ProgramResponse>, AppError> {
     if req.name.is_empty() {
         return Err(AppError::BadRequest("Name is required".to_string()));
     }
-
-    let _program = Program {
-        id: Uuid::new_v4(),
-        user_id: auth.user_id,
-        name: req.name,
-        content: req.content.unwrap_or_default(),
-        status: ProgramStatus::Pending,
-        created_at: Some(chrono::Utc::now().into()),
-        updated_at: Some(chrono::Utc::now().into()),
-    };
+    let program = program::create_program(
+        &state.pool,
+        auth.user_id,
+        req.name,
+        req.content.unwrap_or_default(),
+    )
+    .await?;
 
     Ok(Json(ProgramResponse {
         code: 0,
-        message: "Program created successfully".to_string(),
+        message: Some("Program created successfully".to_string()),
+        result: Some(program),
     }))
 }
 
 pub async fn get_program(
     _auth: AuthUser,
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Program>, AppError> {
     if id.is_nil() {
         return Err(AppError::BadRequest("Id is required".to_string()));
     }
-    Ok(Json(Program {
-        id: Uuid::new_v4(),
-        user_id: Uuid::new_v4(),
-        name: "test".to_string(),
-        content: "print('Hello, World!')".to_string(),
-        status: ProgramStatus::Pending,
-        created_at: Some(chrono::Utc::now().into()),
-        updated_at: Some(chrono::Utc::now().into()),
-    }))
+    let program = program::get_program(&state.pool, id).await?;
+    Ok(Json(program))
 }
 
 pub async fn update_program(
     _auth: AuthUser,
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
-    Json(_req): Json<ProgramRequest>,
+    Json(req): Json<ProgramRequest>,
 ) -> Result<Json<ProgramResponse>, AppError> {
     if id.is_nil() {
         return Err(AppError::BadRequest("Id is required".to_string()));
     }
+    program::update_program(&state.pool, id, Some(req.name), req.content, req.status).await?;
     Ok(Json(ProgramResponse {
         code: 0,
-        message: "Program updated successfully".to_string(),
+        message: Some("Program updated successfully".to_string()),
+        result: None,
     }))
 }
 
 pub async fn delete_program(
     _auth: AuthUser,
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ProgramResponse>, AppError> {
     if id.is_nil() {
         return Err(AppError::BadRequest("Id is required".to_string()));
     }
+    program::delete_program(&state.pool, id).await?;
     Ok(Json(ProgramResponse {
         code: 0,
-        message: "Program deleted successfully".to_string(),
+        message: Some("Program deleted successfully".to_string()),
+        result: None,
     }))
 }
 
 pub async fn compile_program(
     _auth: AuthUser,
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
-    // Json(req): Json<CompilePythonRequest>,
 ) -> Result<Json<ProgramCompileResponse>, AppError> {
-    if id.is_nil() {
-        return Err(AppError::BadRequest("Id is required".to_string()));
-    }
-    // if req.content.is_empty() {
-    //     return Err(AppError::BadRequest("Code is required".to_string()));
-    // }
-    Ok(Json(ProgramCompileResponse {
-        status: ProgramStatus::Compiled,
-        time: chrono::Utc::now().into(),
-        error_file: None,
-        error_type: None,
-        error_line: None,
-        error_message: None,
-        error_suggestions: None,
-    }))
+    let program_service = ProgramService::new(state.pool.clone(), state.python_executor.clone());
+    let result = program_service.compile_program(id).await?;
+    Ok(Json(result))
 }
 
 pub async fn run_program(
+    ws: WebSocketUpgrade,
     _auth: AuthUser,
-    Extension(_state): Extension<Arc<AppState>>,
+    Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
-    // Json(req): Json<ExecutePythonRequest>,
-) -> Result<Json<ProgramCompileResponse>, AppError> {
-    if id.is_nil() {
-        return Err(AppError::BadRequest("Id is required".to_string()));
-    }
-    Ok(Json(ProgramCompileResponse {
-        status: ProgramStatus::Compiled,
-        time: chrono::Utc::now().into(),
-        error_file: None,
-        error_type: None,
-        error_line: None,
-        error_message: None,
-        error_suggestions: None,
-    }))
+) -> impl IntoResponse {
+    let program_service = ProgramService::new(state.pool.clone(), state.python_executor.clone());
+
+    ws.on_upgrade(move |socket| async move {
+        let (mut sender, _) = socket.split();
+
+        match program_service.run_program(id).await {
+            Ok(mut receiver) => {
+                while let Ok(update) = receiver.recv().await {
+                    if let Ok(msg) = serde_json::to_string(&update) {
+                        if sender.send(Message::Text(msg)).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let _ = sender.send(Message::Text(format!("Error: {}", e))).await;
+            }
+        }
+    })
 }

@@ -4,6 +4,7 @@ pub mod log;
 pub mod metrics;
 pub mod monitor;
 pub mod monitor_task;
+pub mod program;
 pub mod scheduler;
 pub mod task;
 pub mod user;
