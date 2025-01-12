@@ -59,8 +59,7 @@ fn api_router() -> Router {
         .route("/users/:id", delete(users::delete_user))
         // 邮件路由
         .route("/email/send", post(email::send_email))
-        .route("/email/verify", post(email::verify_email))
-        // 日志路由
+                // 日志路由
         .route("/logs", get(logs::list_logs))
         .route("/logs/:id", get(logs::get_log))
         .route("/logs/:id", delete(logs::delete_old_logs))

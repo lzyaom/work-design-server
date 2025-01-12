@@ -45,9 +45,4 @@ impl EmailService {
         self.smtp_transport.send(email).await?;
         Ok(())
     }
-
-    pub async fn verify_email(&self, _to: &str, _code: &str) -> Result<(), AppError> {
-        // 实现验证邮件的逻辑
-        Ok(())
-    }
 }
