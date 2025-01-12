@@ -51,6 +51,7 @@ fn api_router() -> Router {
         // 认证路由
         .route("/auth/login", post(auth::login))
         .route("/auth/register", post(auth::register))
+        .route("/auth/code", post(auth::send_verification_code))
         // 用户路由
         .route("/users", get(users::list_users))
         .route("/users/:id", get(users::get_user))

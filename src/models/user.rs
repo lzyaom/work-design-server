@@ -46,3 +46,12 @@ pub struct User {
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerificationCode {
+    pub id: Uuid,
+    pub email: String,
+    pub code: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}

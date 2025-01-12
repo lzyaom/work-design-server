@@ -52,7 +52,7 @@ metrics-exporter-prometheus = "0.13"
 # 日志追踪
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-
+rand = "0.8"
 
 [dev-dependencies]
 tokio-test = "0.4"

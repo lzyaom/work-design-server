@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use rand::Rng;
 use sqlx::SqlitePool;
 use sqlx::Transaction;
 use uuid::Uuid;
@@ -133,4 +134,47 @@ pub async fn get_user_by_email(pool: &SqlitePool, email: &str) -> Result<User, A
     .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     Ok(user)
+}
+
+pub async fn create_verification_code(pool: &SqlitePool, email: &str) -> Result<String, AppError> {
+    // 生成6位随机验证码
+    let code: String = rand::thread_rng()
+        .sample_iter(&rand::distributions::Uniform::new(0, 10))
+        .take(6)
+        .map(|d| d.to_string())
+        .collect();
+
+    let id = Uuid::new_v4();
+    let expires_at = Utc::now() + chrono::Duration::minutes(15);
+
+    sqlx::query!(
+        r#"
+        INSERT INTO verification_codes (id, email, code, expires_at)
+        VALUES (?, ?, ?, ?)
+        "#,
+        id,
+        email,
+        code,
+        expires_at
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(code)
+}
+
+pub async fn verify_code(pool: &SqlitePool, email: &str, code: &str) -> Result<bool, AppError> {
+    let result = sqlx::query!(
+        r#"
+        SELECT * FROM verification_codes 
+        WHERE email = ? AND code = ? AND expires_at > CURRENT_TIMESTAMP
+        ORDER BY created_at DESC LIMIT 1
+        "#,
+        email,
+        code
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(result.is_some())
 }

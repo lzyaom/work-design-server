@@ -16,6 +16,7 @@ use uuid::Uuid;
 pub struct LoginRequest {
     email: String,
     password: String,
+    verification_code: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -29,16 +30,35 @@ pub struct RegisterRequest {
     email: String,
     password: String,
     name: String,
+    verification_code: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SendCodeResponse {
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SendCodeRequest {
+    email: String,
 }
 
 pub async fn login(
     Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
+    // 获取用户信息
     let mut user = user::get_user_by_email(&state.pool, &req.email).await?;
-
+    if user.id == Uuid::nil() {
+        return Err(AppError::Auth("User not found".to_string()));
+    }
+    // 验证密码
     if !verify(&req.password, &user.password_salt.unwrap())? {
         return Err(AppError::Auth("Invalid credentials".to_string()));
+    }
+    // 验证验证码
+    if !user::verify_code(&state.pool, &req.email, &req.verification_code).await? {
+        return Err(AppError::Auth("Invalid verification code".to_string()));
     }
     user.is_active = 1; // 修改用户在线状态
     let token = create_token(&state, &user.id.to_string(), &user.role.to_string())?;
@@ -61,6 +81,10 @@ pub async fn register(
 
     if exists {
         return Err(AppError::Validation("Email already exists".to_string()));
+    }
+    // 验证验证码
+    if !user::verify_code(&state.pool, &req.email, &req.verification_code).await? {
+        return Err(AppError::Auth("Invalid verification code".to_string()));
     }
 
     let password_salt = hash(req.password.as_bytes(), DEFAULT_COST)?;
@@ -89,6 +113,26 @@ pub async fn register(
             password_salt: None,
             ..user
         },
+    }))
+}
+
+pub async fn send_verification_code(
+    Extension(state): Extension<Arc<AppState>>,
+    Json(req): Json<SendCodeRequest>,
+) -> Result<Json<SendCodeResponse>, AppError> {
+    let code = user::create_verification_code(&state.pool, &req.email).await?;
+
+    state
+        .email_service
+        .send_email(
+            &req.email,
+            "您的验证码",
+            &format!("您的验证码是: {}，15分钟内有效。", code),
+        )
+        .await?;
+
+    Ok(Json(SendCodeResponse {
+        message: "Verification code sent".to_string(),
     }))
 }
 
