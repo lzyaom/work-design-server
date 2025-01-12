@@ -19,6 +19,7 @@ mod documents;
 mod email;
 mod logs;
 mod monitor;
+mod program;
 mod tasks;
 mod users;
 mod websocket;
@@ -59,7 +60,7 @@ fn api_router() -> Router {
         .route("/users/:id", delete(users::delete_user))
         // 邮件路由
         .route("/email/send", post(email::send_email))
-                // 日志路由
+        // 日志路由
         .route("/logs", get(logs::list_logs))
         .route("/logs/:id", get(logs::get_log))
         .route("/logs/:id", delete(logs::delete_old_logs))
@@ -80,4 +81,12 @@ fn api_router() -> Router {
             post(documents::update_permissions),
         )
         .route("/monitor", get(monitor::get_status))
+        // 程序路由
+        .route("/program", get(program::list_programs))
+        .route("/program/:id", get(program::get_program))
+        .route("/program", post(program::create_program))
+        .route("/program/:id", put(program::update_program))
+        .route("/program/:id", delete(program::delete_program))
+        .route("/program/compile/:id", post(program::compile_program))
+        .route("/program/run/:id", post(program::run_program))
 }
