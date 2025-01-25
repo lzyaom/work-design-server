@@ -5,8 +5,11 @@ use crate::{
     models::user::{User, UserRole},
     services::user,
 };
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
 use axum::{Extension, Json};
-use bcrypt::{hash, verify, DEFAULT_COST};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -53,20 +56,27 @@ pub async fn login(
         return Err(AppError::Auth("User not found".to_string()));
     }
     // 验证密码
-    if !verify(&req.password, &user.password_salt.unwrap())? {
-        return Err(AppError::Auth("Invalid credentials".to_string()));
+    let argon2 = Argon2::default();
+    let password = user.password.unwrap();
+    let parsed_password = PasswordHash::new(&password).unwrap();
+    if !argon2
+        .verify_password(req.password.as_bytes(), &parsed_password)
+        .is_ok()
+    {
+        return Err(AppError::Auth("Password is incorrect".to_string()));
     }
     // 验证验证码
     if !user::verify_code(&state.pool, &req.email, &req.verification_code).await? {
         return Err(AppError::Auth("Invalid verification code".to_string()));
     }
-    user.is_active = 1; // 修改用户在线状态
+    user.is_online = 1; // 修改用户在线状态
     let token = create_token(&state, &user.id.to_string(), &user.role.to_string())?;
 
     Ok(Json(LoginResponse {
         token,
         user: User {
-            password_salt: None,
+            password: None,
+            salt: None,
             ..user
         },
     }))
@@ -86,19 +96,26 @@ pub async fn register(
     if !user::verify_code(&state.pool, &req.email, &req.verification_code).await? {
         return Err(AppError::Auth("Invalid verification code".to_string()));
     }
-
-    let password_salt = hash(req.password.as_bytes(), DEFAULT_COST)?;
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(req.password.as_bytes(), &salt)
+        .map_err(|e| AppError::Auth(e.to_string()))?
+        .to_string();
     let user_id = Uuid::new_v4();
     let user = user::create_user(
         &state.pool,
         User {
             id: user_id,
             email: req.email,
-            password_salt: Some(password_salt),
+            password: Some(password_hash),
+            salt: Some(salt.to_string()),
             username: Some(req.name),
             role: UserRole::User,
             is_active: 1,
+            is_online: 0,
             avatar: None,
+            gender: 2,
             created_at: Some(chrono::Utc::now()),
             updated_at: Some(chrono::Utc::now()),
         },
@@ -110,7 +127,8 @@ pub async fn register(
     Ok(Json(LoginResponse {
         token,
         user: User {
-            password_salt: None,
+            password: None,
+            salt: None,
             ..user
         },
     }))

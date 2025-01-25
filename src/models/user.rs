@@ -38,18 +38,22 @@ pub struct User {
     pub id: Uuid,
     pub email: String,
     #[serde(skip_serializing)]
-    pub password_salt: Option<String>,
+    pub password: Option<String>,
+    #[serde(skip_serializing)]
+    pub salt: Option<String>,
     pub username: Option<String>,
     pub role: UserRole,
     pub is_active: i64,
+    pub is_online: i64,
     pub avatar: Option<String>,
+    pub gender: i64,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationCode {
-    pub id: Uuid,
+    pub id: i64,
     pub email: String,
     pub code: String,
     pub expires_at: DateTime<Utc>,

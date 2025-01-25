@@ -24,9 +24,6 @@ pub enum AppError {
     #[error("JWT error: {0}")]
     Jwt(#[from] jsonwebtoken::errors::Error),
 
-    #[error("Bcrypt error: {0}")]
-    Bcrypt(#[from] bcrypt::BcryptError),
-
     #[error("Email error: {0}")]
     Email(#[from] lettre::error::Error),
 
@@ -86,13 +83,6 @@ impl IntoResponse for AppError {
             AppError::Jwt(ref e) => {
                 error!(error = ?e, "JWT error occurred");
                 (StatusCode::UNAUTHORIZED, "Invalid token".to_string())
-            }
-            AppError::Bcrypt(ref e) => {
-                error!(error = ?e, "Bcrypt error occurred");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "An encryption error occurred".to_string(),
-                )
             }
             AppError::Email(ref e) => {
                 error!(error = ?e, "Email error occurred");

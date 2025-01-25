@@ -24,8 +24,6 @@ config = "0.13"
 dotenv = "0.15"
 # 错误处理
 thiserror = "1.0"
-# 加密
-bcrypt = "0.15"
 jsonwebtoken = "9.2"
 # 邮件
 lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls", "builder"] }
@@ -53,6 +51,9 @@ metrics-exporter-prometheus = "0.13"
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 rand = "0.8"
+
+# 加密
+argon2 = "0.5.3"
 
 [dev-dependencies]
 tokio-test = "0.4"
