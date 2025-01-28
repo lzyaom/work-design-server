@@ -187,3 +187,24 @@ pub async fn verify_code(pool: &SqlitePool, email: &str, code: &str) -> Result<b
 
     Ok(result.is_some())
 }
+pub async fn update_user_avatar(pool: &SqlitePool, id: Uuid, avatar: &str) -> Result<User, AppError> {
+    let mut transaction: Transaction<'_, sqlx::Sqlite> = pool.begin().await?;
+    sqlx::query!(
+        "UPDATE users SET avatar = COALESCE(?, avatar), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        avatar,
+        id
+    )
+    .execute(&mut *transaction)
+    .await?;
+
+    let user = sqlx::query_as!(
+        User,
+        r#"SELECT id as "id: Uuid", password, salt, email, username, role, is_active, avatar, is_online, gender, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE id = ?"#,
+        id
+    )
+    .fetch_one(&mut *transaction)
+    .await?;
+
+    transaction.commit().await?;
+    Ok(user)
+}

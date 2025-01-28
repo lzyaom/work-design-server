@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # Web 框架
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.7", features = ["ws", "multipart"] }
 # 异步
 tokio = { version = "1.0", features = ["full"] }
 # 序列化

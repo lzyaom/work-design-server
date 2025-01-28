@@ -1,8 +1,8 @@
 use axum::{
-    extract::{Path, Query},
+    extract::{Multipart, Path, Query},
     Extension, Json,
 };
-use serde::Deserialize;
+use std::fs;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -89,4 +89,31 @@ pub async fn delete_user(
 
     user::delete_user(&state.pool, id).await?;
     Ok(())
+}
+pub async fn upload_user_avatar(
+    auth: AuthUser,
+    Extension(state): Extension<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    mut multipart: Multipart,
+) -> Result<Json<User>, AppError> {
+    // 检查权限
+    if auth.user_id != id {
+        return Err(AppError::Auth("Unauthorized".to_string()));
+    }
+
+    // 处理上传的文件
+    while let Some(field) = multipart.next_field().await? {
+        let file_name = field.file_name().unwrap_or("avatar.png").to_string();
+        let file_path = format!("./uploads/{}", file_name);
+
+        // 保存文件
+        let data = field.bytes().await?;
+        fs::write(&file_path, &data)?;
+
+        // 更新用户头像路径
+        let user = user::update_user_avatar(&state.pool, id, &file_path).await?;
+        return Ok(Json(user));
+    }
+
+    Err(AppError::BadRequest("No file uploaded".to_string()))
 }

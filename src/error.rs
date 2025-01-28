@@ -65,6 +65,9 @@ pub enum AppError {
 
     #[error("Json error: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("Multipart error: {0}")]
+    Multipart(#[from] axum::extract::multipart::MultipartError),
 }
 
 impl IntoResponse for AppError {
@@ -153,6 +156,13 @@ impl IntoResponse for AppError {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "A Json error occurred".to_string(),
+                )
+            }
+            AppError::Multipart(ref e) => {
+                error!(error = ?e, "Multipart error occurred");
+                (
+                    StatusCode::BAD_REQUEST,
+                    "A Multipart error occurred".to_string(),
                 )
             }
         };
