@@ -4,10 +4,7 @@ use crate::{
     middleware::auth::Claims,
     models::user::{User, UserRole},
     services::user,
-};
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2,
+    utils::password,
 };
 use axum::{Extension, Json};
 use jsonwebtoken::{encode, EncodingKey, Header};
@@ -56,13 +53,8 @@ pub async fn login(
         return Err(AppError::Auth("User not found".to_string()));
     }
     // 验证密码
-    let argon2 = Argon2::default();
     let password = user.password.unwrap();
-    let parsed_password = PasswordHash::new(&password).unwrap();
-    if !argon2
-        .verify_password(req.password.as_bytes(), &parsed_password)
-        .is_ok()
-    {
+    if !password::verify(&req.password, &password)? {
         return Err(AppError::Auth("Password is incorrect".to_string()));
     }
     // 验证验证码
@@ -96,12 +88,7 @@ pub async fn register(
     if !user::verify_code(&state.pool, &req.email, &req.verification_code).await? {
         return Err(AppError::Auth("Invalid verification code".to_string()));
     }
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(req.password.as_bytes(), &salt)
-        .map_err(|e| AppError::Auth(e.to_string()))?
-        .to_string();
+    let (password_hash, salt) = password::generate(&req.password, None)?;
     let user_id = Uuid::new_v4();
     let user = user::create_user(
         &state.pool,
@@ -109,7 +96,7 @@ pub async fn register(
             id: user_id,
             email: req.email,
             password: Some(password_hash),
-            salt: Some(salt.to_string()),
+            salt: Some(salt),
             username: Some(req.name),
             role: UserRole::User,
             is_active: 1,

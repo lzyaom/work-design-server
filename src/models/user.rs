@@ -59,3 +59,17 @@ pub struct VerificationCode {
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserRequest {
+    pub email: String,
+    pub username: Option<String>,
+    pub is_online: Option<i64>,
+    pub gender: Option<i64>,
+    pub is_active: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserPasswordRequest {
+    pub password: String,
+}

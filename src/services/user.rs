@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use sqlx::Transaction;
 use uuid::Uuid;
 
-use crate::{error::AppError, models::user::User};
+use crate::{error::AppError, models::user::{User, UpdateUserRequest}};
 
 pub async fn get_user_by_id(pool: &SqlitePool, id: Uuid) -> Result<User, AppError> {
     let user = sqlx::query_as!(
@@ -63,26 +63,24 @@ pub async fn list_users(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Ve
 
 pub async fn update_user(
     pool: &SqlitePool,
-    id: Uuid,
-    username: Option<String>,
-    email: Option<String>,
-    avatar: Option<String>,
+    user: UpdateUserRequest
 ) -> Result<User, AppError> {
     let mut transaction: Transaction<'_, sqlx::Sqlite> = pool.begin().await?;
     sqlx::query!(
-        "UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email), avatar = COALESCE(?, avatar), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        username,
-        email,
-        avatar,
-        id
+        "UPDATE users SET username = COALESCE(?, username), is_online = COALESCE(?, is_online), gender = COALESCE(?, gender), is_active = COALESCE(?, is_active), updated_at = CURRENT_TIMESTAMP WHERE email = ?",
+        user.username,
+        user.is_online,
+        user.gender,
+        user.is_active,
+        user.email
     )
     .execute(&mut *transaction)
     .await?;
 
     let user = sqlx::query_as!(
         User,
-        r#"SELECT id as "id: Uuid", password, salt, email, username, role, is_active, avatar, is_online, gender, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE id = ?"#,
-        id
+        r#"SELECT id as "id: Uuid", password, salt, email, username, role, is_active, avatar, is_online, gender, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE email = ?"#,
+        user.email
     )
     .fetch_one(&mut *transaction)
     .await?;
@@ -120,7 +118,11 @@ pub async fn create_user(pool: &SqlitePool, user: User) -> Result<User, AppError
     .fetch_one(pool)
     .await?;
 
-    Ok(user)
+    Ok(User {
+        password: None,
+        salt: None,
+        ..user
+    })
 }
 
 pub async fn check_email_exists(pool: &SqlitePool, email: &str) -> Result<bool, AppError> {
@@ -187,6 +189,34 @@ pub async fn verify_code(pool: &SqlitePool, email: &str, code: &str) -> Result<b
 
     Ok(result.is_some())
 }
+
+pub async fn update_user_password(pool: &SqlitePool, id: Uuid, password: String) -> Result<User, AppError> {
+    let mut transaction: Transaction<'_, sqlx::Sqlite> = pool.begin().await?;
+    sqlx::query!(
+        "UPDATE users SET password = COALESCE(?, password), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        password,
+        id
+    )
+    .execute(&mut *transaction)
+    .await?;
+
+    let user = sqlx::query_as!(
+        User,
+        r#"SELECT id as "id: Uuid", password, salt, email, username, role as "role: String", is_active, avatar, is_online, gender, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM users WHERE id = ?"#,
+        id
+    )
+    .fetch_one(&mut *transaction)
+    .await?;
+
+    transaction.commit().await?;
+    Ok(User {
+        password: None,
+        salt: None,
+        ..user
+    })
+}
+
+
 pub async fn update_user_avatar(pool: &SqlitePool, id: Uuid, avatar: &str) -> Result<User, AppError> {
     let mut transaction: Transaction<'_, sqlx::Sqlite> = pool.begin().await?;
     sqlx::query!(

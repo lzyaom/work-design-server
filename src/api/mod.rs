@@ -55,7 +55,9 @@ fn api_router() -> Router {
         .route("/auth/code", post(auth::send_verification_code))
         // 用户路由
         .route("/users", get(users::list_users))
+        .route("/users", post(users::create_user))
         .route("/upload/avatar", post(users::upload_user_avatar))
+        .route("/users/password/:id", put(users::update_user_password))
         .route("/users/:id", get(users::get_user))
         .route("/users/:id", put(users::update_user))
         .route("/users/:id", delete(users::delete_user))
