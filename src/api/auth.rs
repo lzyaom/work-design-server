@@ -2,7 +2,7 @@ use crate::{
     api::AppState,
     error::AppError,
     middleware::auth::Claims,
-    models::user::{User, UserRole},
+    models::user::{UpdateUserRequest, User, UserRole},
     services::user,
     utils::password,
 };
@@ -61,7 +61,15 @@ pub async fn login(
     if !user::verify_code(&state.pool, &req.email, &req.verification_code).await? {
         return Err(AppError::Auth("Invalid verification code".to_string()));
     }
-    user.is_online = 1; // 修改用户在线状态
+    // 修改登录状态
+    user.is_online = 1;
+    user::update_user(&state.pool, UpdateUserRequest{
+        email: user.email.clone(),
+        gender: Some(user.gender),
+        is_online: Some(1),
+        is_active: Some(1),
+        username: user.username.clone(),
+    }).await?;
     let token = create_token(&state, &user.id.to_string(), &user.role.to_string())?;
 
     Ok(Json(LoginResponse {
