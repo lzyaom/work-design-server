@@ -36,8 +36,6 @@ tokio-cron-scheduler = "0.9"
 sysinfo = "0.29"
 # 异步
 futures = "0.3"
-# 临时文件
-tempfile = "3.8"
 
 # API 文档
 utoipa = { version = "4.1", features = ["axum_extras"] }

@@ -12,7 +12,7 @@ mod services;
 mod utils;
 
 use crate::{
-    services::{broadcast::DocumentBroadcaster, scheduler::Scheduler},
+    services::{broadcast::DocumentBroadcaster, monitor::SystemStatusBroadcaster, scheduler::Scheduler},
     utils::{email::EmailService, python::PythonExecutor},
 };
 
@@ -47,6 +47,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化文档广播器
     let broadcaster = Arc::new(DocumentBroadcaster::new());
 
+    // 初始化系统监控广播器
+    let monitor_broadcaster = Arc::new(SystemStatusBroadcaster::new());
+    monitor_broadcaster.clone().start_broadcast_task().await;
+
     // 初始化调度器
     let scheduler = Scheduler::new(pool.clone()).await?;
     let mut scheduler_lock = scheduler.lock().await;
@@ -75,6 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         email_service,
         python_executor,
         broadcaster: broadcaster.clone(),
+        monitor_broadcaster: monitor_broadcaster.clone(),
         config: config.clone(),
     });
 

@@ -10,7 +10,7 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::{
     config::Config,
     middleware::{monitor::track_metrics, require_auth},
-    services::broadcast::DocumentBroadcaster,
+    services::{broadcast::DocumentBroadcaster, monitor::SystemStatusBroadcaster},
     utils::{email::EmailService, python::PythonExecutor},
 };
 
@@ -30,6 +30,7 @@ pub struct AppState {
     pub email_service: EmailService,
     pub python_executor: PythonExecutor,
     pub broadcaster: Arc<DocumentBroadcaster>,
+    pub monitor_broadcaster: Arc<SystemStatusBroadcaster>,
 }
 
 pub fn create_router(state: AppState) -> Router {
@@ -84,6 +85,7 @@ fn api_router() -> Router {
             post(documents::update_permissions),
         )
         .route("/monitor", get(monitor::get_status))
+        .route("/ws/monitor", get(monitor::ws_monitor))
         // 程序路由
         .route("/program", get(program::list_programs))
         .route("/program/:id", get(program::get_program))
