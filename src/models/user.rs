@@ -1,27 +1,31 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, sqlx::Type, Clone, PartialEq)]
+#[sqlx(type_name = "user_role", rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
     User,
+    Guest,
 }
 
-impl ToString for UserRole {
-    fn to_string(&self) -> String {
+impl fmt::Display for UserRole {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            UserRole::Admin => "admin".to_string(),
-            UserRole::User => "user".to_string(),
+            UserRole::Admin => write!(f, "admin"),
+            UserRole::User => write!(f, "user"),
+            UserRole::Guest => write!(f, "guest"),
         }
     }
 }
 
-impl From<String> for UserRole {
-    fn from(value: String) -> Self {
-        match value.to_lowercase().as_str() {
+impl From<&str> for UserRole {
+    fn from(s: &str) -> Self {
+        match s {
             "admin" => UserRole::Admin,
-            "user" => UserRole::User,
+            "guest" => UserRole::Guest,
             _ => UserRole::User,
         }
     }
@@ -44,6 +48,8 @@ pub struct User {
     pub username: Option<String>,
     pub role: UserRole,
     pub is_active: i64,
+    pub last_ip: Option<String>,
+    pub last_login: Option<DateTime<Utc>>,
     pub is_online: i64,
     pub avatar: Option<String>,
     pub gender: i64,
@@ -60,16 +66,36 @@ pub struct VerificationCode {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListUsersQuery {
+    pub role: Option<UserRole>,
+    pub is_active: Option<i64>,
+    pub is_online: Option<i64>,
+    pub search: Option<String>,
+    pub page: Option<i64>,
+    pub size: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateUserRequest {
+    pub username: Option<String>,
+    pub email: String,
+    pub password: String,
+    pub role: Option<UserRole>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateUserRequest {
     pub email: String,
     pub username: Option<String>,
     pub is_online: Option<i64>,
     pub gender: Option<i64>,
+    pub role: Option<UserRole>,
     pub is_active: Option<i64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateUserPasswordRequest {
-    pub password: String,
+    pub old_password: String,
+    pub new_password: String,
 }

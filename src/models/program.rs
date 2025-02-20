@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[sqlx(type_name = "program_status", rename_all = "lowercase")]
 pub enum ProgramStatus {
     Pending,
     Compiling,
@@ -40,13 +41,17 @@ impl From<String> for ProgramStatus {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Program {
-    pub id: Uuid,                          // 主键
-    pub user_id: Uuid,                     // 用户ID
-    pub name: String,                      // 名称
-    pub content: String,                   // 代码内容
-    pub status: ProgramStatus,             // 运行状态
-    pub created_at: Option<DateTime<Utc>>, // 创建时间
-    pub updated_at: Option<DateTime<Utc>>, // 更新时间
+    pub id: Uuid,
+    pub user_id: Uuid,                       // 用户 ID
+    pub name: String,                        // 程序名称
+    pub description: Option<String>,         // 程序描述
+    pub source_code: String,                 // 源代码
+    pub compiled_code: Option<String>,       // 编译后的代码
+    pub status: ProgramStatus,               // 程序状态
+    pub metadata: Option<serde_json::Value>, // 元数据
+    pub is_active: bool,                     // 是否激活
+    pub created_at: Option<DateTime<Utc>>,   // 创建时间
+    pub updated_at: Option<DateTime<Utc>>,   // 更新时间
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,31 +65,42 @@ pub struct ProgramCompileResponse {
     pub error_suggestions: Option<String>, // 错误修改建议
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ProgramRequest {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateProgramRequest {
     pub name: String,
-    pub content: Option<String>,
-    pub status: Option<String>,
+    pub user_id: Uuid,
+    pub description: Option<String>,
+    pub source_code: String,
+    pub status: ProgramStatus,
+    pub metadata: Option<serde_json::Value>,
+    pub is_active: bool,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ProgramResponse {
-    pub code: i32,
-    pub message: Option<String>,
-    pub result: Option<Program>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListProgramResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub status: ProgramStatus,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, Clone)]
-pub struct ProgramExecutionUpdate {
-    pub program_id: Uuid,
-    pub line_number: i32,
+pub struct ProgramExecution {
+    pub id: Uuid,
+    pub line: i32,
+    pub input: Option<String>,
     pub output: Option<String>,
     pub error: Option<String>,
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ListProgramsQuery {
-    pub limit: i64,
-    pub offset: i64,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListProgramQuery {
+    pub search: Option<String>,
+    pub page: Option<i64>,
+    pub size: Option<i64>,
+    pub sort: Option<i8>,
 }
