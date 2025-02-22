@@ -1,5 +1,5 @@
 [package]
-name = "work_designer_server"
+name = "work-designer-server"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,9 +12,19 @@ tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # 数据库
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "uuid", "chrono", "json", 'sqlite'] }
+sqlx = { version = "0.7", features = [
+    "runtime-tokio-native-tls",
+    "sqlite",
+    "macros",
+    "migrate",
+    "uuid",
+    "chrono",
+    "json",
+] }
 # 唯一标识
 uuid = { version = "1.0", features = ["serde", "v4"] }
+# redis
+deadpool-redis = { version = "0.13", features = ["serde"] }
 # 时间
 chrono = { version = "0.4", features = ["serde"] }
 # 中间件
@@ -26,8 +36,8 @@ dotenv = "0.15"
 thiserror = "1.0"
 jsonwebtoken = "9.2"
 # 邮件
-lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls", "builder"] }
-# Python 
+lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls"] }
+# Python
 pyo3 = { version = "0.20", features = ["auto-initialize"] }
 # 系统监控
 cron = "0.12"
@@ -55,3 +65,10 @@ argon2 = "0.5.3"
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+[features]
+default = ["migrate"]
+migrate = []
+
+[workspace]
+members = ["."]
