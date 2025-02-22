@@ -1,48 +1,56 @@
+use crate::error::AppError;
 use lettre::{
     message::header::ContentType, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
     AsyncTransport, Message, Tokio1Executor,
 };
+use std::sync::Arc;
 
-use crate::error::AppError;
-
+#[derive(Clone)]
 pub struct EmailService {
-    smtp_transport: AsyncSmtpTransport<Tokio1Executor>,
+    transport: Arc<AsyncSmtpTransport<Tokio1Executor>>,
     from_address: String,
 }
 
 impl EmailService {
     pub fn new(
         smtp_host: &str,
-        smtp_username: &str,
-        smtp_password: &str,
+        username: &str,
+        password: &str,
         from_address: String,
     ) -> Result<Self, AppError> {
-        let creds = Credentials::new(smtp_username.to_string(), smtp_password.to_string());
+        let creds = Credentials::new(username.to_string(), password.to_string());
 
-        let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)?
+        let transport = AsyncSmtpTransport::<Tokio1Executor>::relay(smtp_host)
+            .map_err(|e| AppError::Configuration(format!("SMTP setup error: {}", e)))?
             .credentials(creds)
             .build();
 
-        Ok(Self {
-            smtp_transport,
+        Ok(EmailService {
+            transport: Arc::new(transport),
             from_address,
         })
     }
 
-    pub async fn send_email(
-        &self,
-        to: &str,
-        subject: &str,
-        html_content: &str,
-    ) -> Result<(), AppError> {
+    pub async fn send_email(&self, to: &str, subject: &str, body: &str) -> Result<(), AppError> {
         let email = Message::builder()
-            .from(self.from_address.parse()?)
-            .to(to.parse()?)
+            .from(
+                self.from_address
+                    .parse()
+                    .map_err(|e| AppError::Configuration(format!("Invalid from address: {}", e)))?,
+            )
+            .to(to
+                .parse()
+                .map_err(|e| AppError::Configuration(format!("Invalid to address: {}", e)))?)
             .subject(subject)
             .header(ContentType::TEXT_HTML)
-            .body(html_content.to_string())?;
+            .body(body.to_string())
+            .map_err(|e| AppError::Configuration(format!("Email build error: {}", e)))?;
 
-        self.smtp_transport.send(email).await?;
+        self.transport
+            .send(email)
+            .await
+            .map_err(|e| AppError::External(format!("Failed to send email: {}", e)))?;
+
         Ok(())
     }
 }
