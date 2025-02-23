@@ -2,8 +2,9 @@ use crate::{
     error::AppError,
     models::{
         CreateProgramRequest, ListProgramQuery, ListProgramResponse, Program,
-        ProgramCompileResponse, ProgramExecution, ProgramStatus,
+        ProgramCompileResponse, ProgramExecution, ProgramStatus, UpdateProgram,
     },
+    services::program,
     utils::python::PythonExecutor,
 };
 use chrono::{DateTime, Utc};
@@ -32,14 +33,22 @@ impl ProgramService {
 
         // 更新状态为编译中
         program.status = ProgramStatus::Compiling;
-        update_program(&self.pool, id, None, None, Some(program.status.to_string())).await?;
+        let mut update_program = UpdateProgram {
+            name: Some(program.name.clone()),
+            source_code: Some(program.source_code.clone()),
+            status: Some(program.status),
+            is_active: Some(program.is_active),
+            description: program.description.clone(),
+            metadata: program.metadata.clone(),
+        };
+        program::update_program(&self.pool, id, update_program.clone()).await?;
 
         // 执行编译
         match self.python_executor.compile(&program.source_code).await {
             Ok(_) => {
                 program.status = ProgramStatus::Compiled;
-                update_program(&self.pool, id, None, None, Some(program.status.to_string()))
-                    .await?;
+                update_program.status = Some(program.status.clone());
+                program::update_program(&self.pool, id, update_program).await?;
 
                 Ok(ProgramCompileResponse {
                     status: program.status,
@@ -53,8 +62,8 @@ impl ProgramService {
             }
             Err(e) => {
                 program.status = ProgramStatus::Failed;
-                update_program(&self.pool, id, None, None, Some(program.status.to_string()))
-                    .await?;
+                update_program.status = Some(program.status.clone());
+                program::update_program(&self.pool, id, update_program.clone()).await?;
 
                 Ok(ProgramCompileResponse {
                     status: program.status,
@@ -203,15 +212,18 @@ pub async fn list_programs(
 pub async fn update_program(
     pool: &SqlitePool,
     id: Uuid,
-    name: Option<String>,
-    content: Option<String>,
-    status: Option<String>,
+    program: UpdateProgram,
 ) -> Result<(), AppError> {
     sqlx::query!(
-        r#"UPDATE programs SET name = COALESCE(?, name), source_code = COALESCE(?, source_code), status = COALESCE(?, status) WHERE id = ?"#,
-        name,
-        content,
-        status,
+        r#"UPDATE programs SET
+            name = COALESCE(?, name), source_code = COALESCE(?, source_code), status = COALESCE(?, status), is_active = COALESCE(?, is_active), description = COALESCE(?, description), metadata = COALESCE(?, metadata)
+        WHERE id = ?"#,
+        program.name,
+        program.source_code,
+        program.status,
+        program.is_active,
+        program.description,
+        program.metadata,
         id
     )
     .execute(pool)

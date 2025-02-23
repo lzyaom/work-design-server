@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, sqlx::Type, PartialEq, Clone)]
 #[sqlx(type_name = "program_status", rename_all = "lowercase")]
 pub enum ProgramStatus {
     Pending,
@@ -42,16 +43,16 @@ impl From<String> for ProgramStatus {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Program {
     pub id: Uuid,
-    pub user_id: Uuid,                       // 用户 ID
-    pub name: String,                        // 程序名称
-    pub description: Option<String>,         // 程序描述
-    pub source_code: String,                 // 源代码
-    pub compiled_code: Option<String>,       // 编译后的代码
-    pub status: ProgramStatus,               // 程序状态
-    pub metadata: Option<serde_json::Value>, // 元数据
-    pub is_active: bool,                     // 是否激活
-    pub created_at: Option<DateTime<Utc>>,   // 创建时间
-    pub updated_at: Option<DateTime<Utc>>,   // 更新时间
+    pub user_id: Uuid,                     // 用户 ID
+    pub name: String,                      // 程序名称
+    pub description: Option<String>,       // 程序描述
+    pub source_code: String,               // 源代码
+    pub compiled_code: Option<String>,     // 编译后的代码
+    pub status: ProgramStatus,             // 程序状态
+    pub metadata: Option<Value>,           // 元数据
+    pub is_active: bool,                   // 是否激活
+    pub created_at: Option<DateTime<Utc>>, // 创建时间
+    pub updated_at: Option<DateTime<Utc>>, // 更新时间
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -72,7 +73,7 @@ pub struct CreateProgramRequest {
     pub description: Option<String>,
     pub source_code: String,
     pub status: ProgramStatus,
-    pub metadata: Option<serde_json::Value>,
+    pub metadata: Option<Value>,
     pub is_active: bool,
 }
 
@@ -85,6 +86,16 @@ pub struct ListProgramResponse {
     pub status: ProgramStatus,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateProgram {
+    pub name: Option<String>,
+    pub source_code: Option<String>,
+    pub status: Option<ProgramStatus>,
+    pub is_active: Option<bool>,
+    pub description: Option<String>,
+    pub metadata: Option<Value>,
 }
 
 #[derive(Debug, Serialize, Clone)]
