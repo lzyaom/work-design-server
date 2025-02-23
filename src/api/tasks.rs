@@ -2,136 +2,75 @@ use axum::{
     extract::{Path, Query},
     Extension, Json,
 };
-use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
-    api::AppState,
     error::AppError,
-    middleware::auth::AuthUser,
-    models::{
-        task::{ScheduledTask, TaskType},
-        user::UserRole,
-    },
+    models::{CreateTaskRequest, ListTasksQuery, ResponseResult, ScheduledTask, UpdateTaskRequest},
     services::task,
 };
 
-#[derive(Debug, Deserialize)]
-pub struct CreateTaskRequest {
-    name: String,
-    cron_expression: String,
-    task_type: TaskType,
-    parameters: Option<serde_json::Value>,
-}
+use super::AppState;
 
-#[derive(Debug, Deserialize)]
-pub struct ListTasksQuery {
-    limit: Option<i64>,
-    offset: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateTaskRequest {
-    name: Option<String>,
-    cron_expression: Option<String>,
-    parameters: Option<serde_json::Value>,
-    is_active: Option<bool>,
-}
 pub async fn task_list(
-    auth: AuthUser,
     Extension(state): Extension<Arc<AppState>>,
     Query(query): Query<ListTasksQuery>,
-) -> Result<Json<Vec<ScheduledTask>>, AppError> {
-    let role = UserRole::from(auth.role);
-    if role != UserRole::Admin {
-        return Err(AppError::Auth("Insufficient permissions".to_string()));
-    }
+) -> Result<Json<ResponseResult<Vec<ScheduledTask>>>, AppError> {
+    let tasks = task::list_tasks(&state.db.sqlite, query).await?;
 
-    let tasks = task::list_tasks(
-        &state.pool,
-        query.limit.unwrap_or(100),
-        query.offset.unwrap_or(0),
-    )
-    .await?;
-
-    Ok(Json(tasks))
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: None,
+        result: Some(tasks),
+    }))
 }
 
 pub async fn create_task(
-    auth: AuthUser,
     Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<CreateTaskRequest>,
-) -> Result<Json<ScheduledTask>, AppError> {
-    // 检查权限
-    let role = UserRole::from(auth.role);
-    if role != UserRole::Admin {
-        return Err(AppError::Auth("Insufficient permissions".to_string()));
-    }
-
-    let task = task::create_task(
-        &state.pool,
-        req.name,
-        req.cron_expression,
-        req.task_type,
-        req.parameters,
-    )
-    .await?;
-
-    Ok(Json(task))
-}
-
-pub async fn update_task(
-    auth: AuthUser,
-    Extension(state): Extension<Arc<AppState>>,
-    Path(id): Path<Uuid>,
-    Json(req): Json<UpdateTaskRequest>,
-) -> Result<Json<ScheduledTask>, AppError> {
-    // 检查权限
-    let role = UserRole::from(auth.role);
-    if role != UserRole::Admin {
-        return Err(AppError::Auth("Insufficient permissions".to_string()));
-    }
-
-    let task = task::update_task(
-        &state.pool,
-        id,
-        req.name,
-        req.cron_expression,
-        req.parameters,
-        req.is_active,
-    )
-    .await?;
-
-    Ok(Json(task))
-}
-
-pub async fn delete_task(
-    auth: AuthUser,
-    Extension(state): Extension<Arc<AppState>>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<()>, AppError> {
-    // 检查权限
-    let role = UserRole::from(auth.role);
-    if role != UserRole::Admin {
-        return Err(AppError::Auth("Insufficient permissions".to_string()));
-    }
-
-    task::delete_task(&state.pool, id).await?;
-    Ok(Json(()))
+) -> Result<Json<ResponseResult<()>>, AppError> {
+    task::create_task(&state.db.sqlite, req).await?;
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: Some("Task created successfully".to_string()),
+        result: None,
+    }))
 }
 
 pub async fn get_task(
-    auth: AuthUser,
     Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<Json<ScheduledTask>, AppError> {
-    // 检查权限
-    let role = UserRole::from(auth.role);
-    if role != UserRole::Admin {
-        return Err(AppError::Auth("Insufficient permissions".to_string()));
-    }
+) -> Result<Json<ResponseResult<ScheduledTask>>, AppError> {
+    let task = task::get_task(&state.db.sqlite, id).await?;
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: None,
+        result: Some(task),
+    }))
+}
 
-    let task = task::get_task(&state.pool, id).await?;
-    Ok(Json(task))
+pub async fn update_task(
+    Extension(state): Extension<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<UpdateTaskRequest>,
+) -> Result<Json<ResponseResult<()>>, AppError> {
+    task::update_task(&state.db.sqlite, id, req).await?;
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: Some("Task updated successfully".to_string()),
+        result: None,
+    }))
+}
+
+pub async fn delete_task(
+    Extension(state): Extension<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ResponseResult<()>>, AppError> {
+    task::delete_task(&state.db.sqlite, id).await?;
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: Some("Task deleted successfully".to_string()),
+        result: None,
+    }))
 }

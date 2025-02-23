@@ -48,7 +48,7 @@ pub async fn login(
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
     // 获取用户信息
-    let mut user = user::get_user_by_email(&state.pool, &req.email).await?;
+    let mut user = user::get_user_by_email(&state.db.sqlite, &req.email).await?;
     if user.id == Uuid::nil() {
         return Err(AppError::Auth("User not found".to_string()));
     }
@@ -58,16 +58,17 @@ pub async fn login(
         return Err(AppError::Auth("Password is incorrect".to_string()));
     }
     // 验证验证码
-    if !user::verify_code(&state.pool, &req.email, &req.verification_code).await? {
+    if !user::verify_code(&state.db.sqlite, &req.email, &req.verification_code).await? {
         return Err(AppError::Auth("Invalid verification code".to_string()));
     }
     // 修改登录状态
-    user.is_online = 1;
-    user::update_user(&state.pool, UpdateUserRequest{
+    user.is_online = true;
+    user::update_user(&state.db.sqlite, UpdateUserRequest{
         email: user.email.clone(),
         gender: Some(user.gender),
         is_online: Some(1),
         is_active: Some(1),
+        role: Some(user.role.clone()),
         username: user.username.clone(),
     }).await?;
     let token = create_token(&state, &user.id.to_string(), &user.role.to_string())?;
@@ -87,19 +88,19 @@ pub async fn register(
     Json(req): Json<RegisterRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
     // 检查邮箱是否已存在
-    let exists = user::check_email_exists(&state.pool, &req.email).await?;
+    let exists = user::check_email_exists(&state.db.sqlite, &req.email).await?;
 
     if exists {
         return Err(AppError::Validation("Email already exists".to_string()));
     }
     // 验证验证码
-    if !user::verify_code(&state.pool, &req.email, &req.verification_code).await? {
+    if !user::verify_code(&state.db.sqlite, &req.email, &req.verification_code).await? {
         return Err(AppError::Auth("Invalid verification code".to_string()));
     }
     let (password_hash, salt) = password::generate(&req.password, None)?;
     let user_id = Uuid::new_v4();
     let user = user::create_user(
-        &state.pool,
+        &state.db.sqlite,
         User {
             id: user_id,
             email: req.email,
@@ -107,12 +108,13 @@ pub async fn register(
             salt: Some(salt),
             username: Some(req.name),
             role: UserRole::User,
-            is_active: 1,
-            is_online: 0,
+            is_active: true,
+            is_online: false,
+            last_ip: None,
+            last_login: None,
             avatar: None,
             gender: 2,
-            created_at: Some(chrono::Utc::now()),
-            updated_at: Some(chrono::Utc::now()),
+            created_at: Some(chrono::Utc::now())
         },
     )
     .await?;
@@ -133,7 +135,7 @@ pub async fn send_verification_code(
     Extension(state): Extension<Arc<AppState>>,
     Json(req): Json<SendCodeRequest>,
 ) -> Result<Json<SendCodeResponse>, AppError> {
-    let code = user::create_verification_code(&state.pool, &req.email).await?;
+    let code = user::create_verification_code(&state.db.sqlite, &req.email).await?;
 
     state
         .email_service

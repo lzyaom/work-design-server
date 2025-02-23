@@ -1,5 +1,5 @@
-use crate::api::AppState;
 use crate::error::AppError;
+use crate::{api::AppState, models::ResponseResult};
 use axum::{Extension, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -24,13 +24,15 @@ pub struct VerifyEmailResponse {
 pub async fn send_email(
     Extension(state): Extension<Arc<AppState>>,
     Json(payload): Json<SendEmailRequest>,
-) -> Result<Json<SendEmailResponse>, AppError> {
+) -> Result<Json<ResponseResult<()>>, AppError> {
     // 实现发送邮件的逻辑
     state
         .email_service
         .send_email(&payload.email, &payload.subject, &payload.body)
         .await?;
-    Ok(Json(SendEmailResponse {
-        message: "Email sent successfully".to_string(),
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: Some("Email sent successfully".to_string()),
+        result: None,
     }))
 }

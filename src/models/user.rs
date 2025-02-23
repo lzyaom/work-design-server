@@ -107,6 +107,5 @@ pub struct UpdateUserRequest {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateUserPasswordRequest {
-    pub old_password: String,
-    pub new_password: String,
+    pub password: String,
 }

@@ -10,10 +10,7 @@ use crate::{
     api::AppState,
     error::AppError,
     middleware::auth::AuthUser,
-    models::{
-        user::{UpdateUserPasswordRequest, UpdateUserRequest, User, UserRole},
-        ListUsersQuery,
-    },
+    models::{ListUsersQuery, ResponseResult, UpdateUserPasswordRequest, UpdateUserRequest, User},
     services::user,
     utils::password,
 };
@@ -22,34 +19,36 @@ pub async fn list_users(
     auth: AuthUser,
     Extension(state): Extension<Arc<AppState>>,
     Query(query): Query<ListUsersQuery>,
-) -> Result<Json<Vec<User>>, AppError> {
+) -> Result<Json<ResponseResult<Vec<User>>>, AppError> {
     // 检查权限
-    let role = UserRole::from(auth.role);
-    if role != UserRole::Admin {
+    if !auth.is_admin() {
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
 
-    let users = user::list_users(
-        &state.pool,
-        query.limit.unwrap_or(10),
-        query.offset.unwrap_or(0),
-    )
-    .await?;
+    let users = user::list_users(&state.db.sqlite, query).await?;
 
-    Ok(Json(users))
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: None,
+        result: Some(users),
+    }))
 }
 
 pub async fn get_user(
     auth: AuthUser,
     Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<Json<User>, AppError> {
+) -> Result<Json<ResponseResult<User>>, AppError> {
     // 检查权限
     if auth.user_id != id {
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
-    let user = user::get_user_by_id(&state.pool, id).await?;
-    Ok(Json(user))
+    let user = user::get_user_by_id(&state.db.sqlite, id).await?;
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: Some("User found".to_string()),
+        result: Some(user),
+    }))
 }
 
 pub async fn update_user(
@@ -57,31 +56,38 @@ pub async fn update_user(
     Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateUserRequest>,
-) -> Result<Json<User>, AppError> {
+) -> Result<Json<ResponseResult<()>>, AppError> {
     // 检查权限
     if auth.user_id != id {
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
 
-    let user = user::update_user(&state.pool, req).await?;
-    Ok(Json(user))
+    user::update_user(&state.db.sqlite, req).await?;
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: Some("User updated successfully".to_string()),
+        result: Some(()),
+    }))
 }
 
 pub async fn delete_user(
     auth: AuthUser,
     Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> Result<(), AppError> {
+) -> Result<Json<ResponseResult<()>>, AppError> {
     // 检查权限
-    let role = UserRole::from(auth.role);
-    if auth.user_id != id && role != UserRole::Admin {
+    if auth.user_id != id && !auth.is_admin() {
         return Err(AppError::Auth(
             "Not allowed to delete users, only admin can do this".to_string(),
         ));
     }
 
-    user::delete_user(&state.pool, id).await?;
-    Ok(())
+    user::delete_user(&state.db.sqlite, id).await?;
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: Some("User deleted successfully".to_string()),
+        result: Some(()),
+    }))
 }
 
 pub async fn create_user(
@@ -90,15 +96,14 @@ pub async fn create_user(
     Json(user): Json<User>,
 ) -> Result<Json<User>, AppError> {
     // 检查权限
-    let role = UserRole::from(auth.role);
-    if role != UserRole::Admin {
+    if !auth.is_admin() {
         return Err(AppError::Auth(
             "Not allowed to create users, only admin can do this".to_string(),
         ));
     }
 
     // 检查邮箱是否已存在
-    let exists = user::check_email_exists(&state.pool, &user.email).await?;
+    let exists = user::check_email_exists(&state.db.sqlite, &user.email).await?;
     if exists {
         return Err(AppError::Auth("Email already exists".to_string()));
     }
@@ -107,15 +112,14 @@ pub async fn create_user(
     let user_id = Uuid::new_v4();
 
     let user = user::create_user(
-        &state.pool,
+        &state.db.sqlite,
         User {
             id: user_id,
             password: Some(password_hash),
             salt: Some(salt),
-            is_active: 1,
-            is_online: 0,
+            is_active: true,
+            is_online: false,
             created_at: Some(chrono::Utc::now()),
-            updated_at: Some(chrono::Utc::now()),
             ..user
         },
     )
@@ -128,17 +132,21 @@ pub async fn update_user_password(
     Extension(state): Extension<Arc<AppState>>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateUserPasswordRequest>,
-) -> Result<Json<User>, AppError> {
+) -> Result<Json<ResponseResult<()>>, AppError> {
     // 检查权限
     if auth.user_id != id {
         return Err(AppError::Auth("Unauthorized".to_string()));
     }
 
-    let user = user::get_user_by_id(&state.pool, id).await?;
+    let user = user::get_user_by_id(&state.db.sqlite, id).await?;
     let (password_hash, _) = password::generate(&req.password, user.salt.as_deref())?;
 
-    let user = user::update_user_password(&state.pool, id, password_hash).await?;
-    Ok(Json(user))
+    user::update_user_password(&state.db.sqlite, id, password_hash).await?;
+    Ok(Json(ResponseResult {
+        code: 0,
+        message: Some("Password updated successfully".to_string()),
+        result: Some(()),
+    }))
 }
 
 pub async fn upload_user_avatar(
@@ -162,7 +170,7 @@ pub async fn upload_user_avatar(
         fs::write(&file_path, &data)?;
 
         // 更新用户头像路径
-        let user = user::update_user_avatar(&state.pool, id, &file_path).await?;
+        let user = user::update_user_avatar(&state.db.sqlite, id, &file_path).await?;
         return Ok(Json(user));
     }
 

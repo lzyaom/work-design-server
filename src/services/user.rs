@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 use sqlx::Transaction;
 use uuid::Uuid;
 
+use crate::models::ListUsersQuery;
 use crate::{error::AppError, models::user::{User, UpdateUserRequest}};
 
 pub async fn get_user_by_id(pool: &SqlitePool, id: Uuid) -> Result<User, AppError> {
@@ -34,7 +35,10 @@ pub async fn get_user_by_id(pool: &SqlitePool, id: Uuid) -> Result<User, AppErro
     Ok(user)
 }
 
-pub async fn list_users(pool: &SqlitePool, limit: i64, offset: i64) -> Result<Vec<User>, AppError> {
+pub async fn list_users(pool: &SqlitePool, query: ListUsersQuery) -> Result<Vec<User>, AppError> {
+    let limit = query.size.unwrap_or(10);
+    let page = query.page.unwrap_or(0);
+    let offset = (page - 1) * limit;
     let users = sqlx::query_as!(
         User,
         r#"SELECT 

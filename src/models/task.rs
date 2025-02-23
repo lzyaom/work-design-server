@@ -126,6 +126,7 @@ pub struct ScheduledTask {
     pub last_run_at: Option<DateTime<Utc>>, // 上次运行时间
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ListTasksQuery {
     pub search: Option<String>,
     pub task_type: Option<TaskType>,
