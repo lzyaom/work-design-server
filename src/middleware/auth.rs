@@ -19,10 +19,24 @@ pub struct Claims {
     pub exp: usize,   // expiration time
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthUser {
     pub user_id: uuid::Uuid,
     pub role: String,
+}
+
+impl AuthUser {
+    pub fn is_admin(&self) -> bool {
+        self.role == "admin"
+    }
+
+    pub fn is_user(&self) -> bool {
+        self.role == "user"
+    }
+
+    pub fn is_guest(&self) -> bool {
+        self.role == "guest"
+    }
 }
 
 #[async_trait]
