@@ -1,30 +1,24 @@
 use crate::{
     error::AppError,
-    models::log::{Log, LogLevel},
+    models::{ListLogsQuery, Log},
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use serde_json::Value as JsonValue;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-pub async fn create_log(
-    pool: &SqlitePool,
-    level: LogLevel,
-    message: String,
-    metadata: Option<Value>,
-) -> Result<Log, AppError> {
-    let level_str = level.to_string();
-    let id = Uuid::new_v4();
+pub async fn create_log(pool: &SqlitePool, log: Log) -> Result<Log, AppError> {
+    let level = log.level.to_string();
     let log = sqlx::query_as!(
         Log,
-        r#"INSERT INTO logs (id, level, message, metadata)
-        VALUES (?, ?, ?, ?)
-        RETURNING id as "id: Uuid", level, message, metadata as "metadata: JsonValue", created_at as "created_at: DateTime<Utc>""#,
-        id,
-        level_str,
-        message,
-        metadata
+        r#"INSERT INTO logs (id, level, message, source, metadata)
+        VALUES (?, ?, ?, ?, ?)
+        RETURNING id as "id: Uuid", level as "level: String", message, source, metadata as "metadata: Value", created_at as "created_at: DateTime<Utc>""#,
+        log.id,
+        level,
+        log.message,
+        log.source,
+        log.metadata
     )
     .fetch_one(pool)
     .await?;
@@ -32,28 +26,28 @@ pub async fn create_log(
     Ok(log)
 }
 
-pub async fn list_logs(
-    pool: &SqlitePool,
-    limit: i64,
-    offset: i64,
-    level: Option<LogLevel>,
-) -> Result<Vec<Log>, AppError> {
-    let logs = match level {
+pub async fn list_logs(pool: &SqlitePool, query: ListLogsQuery) -> Result<Vec<Log>, AppError> {
+    let limit = query.size.unwrap_or(10);
+    let page = query.page.unwrap_or(1);
+    let offset = (page - 1) * limit;
+
+    let logs = match query.level {
         Some(level) => {
-            let level_str = level.to_string();
+            let level = level.to_string();
             sqlx::query_as!(
                 Log,
                 r#"SELECT 
                     id as "id: Uuid",
                     level as "level: String",
                     message,
-                    metadata as "metadata: JsonValue",
+                    source,
+                    metadata as "metadata: Value",
                     created_at as "created_at: DateTime<Utc>"
                 FROM logs 
                 WHERE level = ?
                 ORDER BY created_at DESC
                 LIMIT ? OFFSET ?"#,
-                level_str,
+                level,
                 limit,
                 offset
             )
@@ -65,9 +59,10 @@ pub async fn list_logs(
                 Log,
                 r#"SELECT 
                     id as "id: Uuid",
-                    level,
+                    level as "level: String",
                     message,
-                    metadata as "metadata: JsonValue",
+                    source,
+                    metadata as "metadata: Value",
                     created_at as "created_at: DateTime<Utc>"
                 FROM logs
                 ORDER BY created_at DESC
@@ -103,9 +98,10 @@ pub async fn get_log(pool: &SqlitePool, id: Uuid) -> Result<Log, AppError> {
         Log,
         r#"SELECT 
             id as "id: Uuid",
-            level,
+            level as "level: String",
             message,
-            metadata as "metadata: JsonValue",
+            source,
+            metadata as "metadata: Value",
             created_at as "created_at: DateTime<Utc>"
         FROM logs WHERE id = ?"#,
         id

@@ -29,6 +29,20 @@ impl ToString for TaskStatus {
     }
 }
 
+impl From<String> for TaskStatus {
+    fn from(s: String) -> Self {
+        match s.to_lowercase().as_str() {
+            "scheduled" => TaskStatus::Scheduled,
+            "running" => TaskStatus::Running,
+            "completed" => TaskStatus::Completed,
+            "failed" => TaskStatus::Failed,
+            "paused" => TaskStatus::Paused,
+            "canceled" => TaskStatus::Canceled,
+            _ => TaskStatus::Pending,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "task_priority", rename_all = "lowercase")]
 pub enum TaskPriority {
@@ -45,6 +59,17 @@ impl ToString for TaskPriority {
             TaskPriority::Medium => "medium".to_string(),
             TaskPriority::High => "high".to_string(),
             TaskPriority::Critical => "critical".to_string(),
+        }
+    }
+}
+
+impl From<String> for TaskPriority {
+    fn from(s: String) -> Self {
+        match s.to_lowercase().as_str() {
+            "medium" => TaskPriority::Medium,
+            "high" => TaskPriority::High,
+            "critical" => TaskPriority::Critical,
+            _ => TaskPriority::Low,
         }
     }
 }
@@ -81,28 +106,39 @@ impl From<String> for TaskType {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ScheduledTask {
-    pub id: Uuid,
-    pub name: String,
-    pub description: Option<String>,
-    pub task_type: String,
-    pub cron_expression: Option<String>,
-    pub one_time: bool,
-    pub priority: TaskPriority,
-    pub timeout_seconds: Option<i32>,
-    pub max_retries: i32,
-    pub retry_delay_seconds: i32,
-    pub parameters: Option<Value>,
-    pub status: TaskStatus,
-    pub is_active: bool,
-    pub created_by: Uuid,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub next_run_at: Option<DateTime<Utc>>,
-    pub last_run_at: Option<DateTime<Utc>>,
+    pub id: Uuid,                           // 任务 ID
+    pub name: String,                       // 任务名称
+    pub description: Option<String>,        // 任务描述
+    pub task_type: TaskType,                // 任务类型
+    pub cron_expression: Option<String>,    // cron 表达式
+    pub one_time: bool,                     // 是否一次性任务
+    pub priority: TaskPriority,             // 任务优先级
+    pub timeout_seconds: Option<i64>,       // 超时时间
+    pub max_retries: i64,                   // 最大重试次数
+    pub retry_delay_seconds: i64,           // 重试延迟时间
+    pub parameters: Option<Value>,          // 任务参数
+    pub status: TaskStatus,                 // 任务状态
+    pub is_active: bool,                    // 是否激活
+    pub created_by: Uuid,                   // 创建者 ID
+    pub created_at: Option<DateTime<Utc>>,  // 创建时间
+    pub updated_at: Option<DateTime<Utc>>,  // 更新时间
+    pub next_run_at: Option<DateTime<Utc>>, // 下次运行时间
+    pub last_run_at: Option<DateTime<Utc>>, // 上次运行时间
+}
+
+pub struct ListTasksQuery {
+    pub search: Option<String>,
+    pub task_type: Option<TaskType>,
+    pub status: Option<TaskStatus>,
+    pub priority: Option<TaskPriority>,
+    pub is_active: Option<bool>,
+    pub page: i32,
+    pub size: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateTaskRequest {
+    pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
     pub task_type: TaskType,
@@ -113,6 +149,9 @@ pub struct CreateTaskRequest {
     pub max_retries: Option<i32>,
     pub retry_delay_seconds: Option<i32>,
     pub parameters: Option<Value>,
+    pub is_active: Option<bool>,
+    pub status: TaskStatus,
+    pub created_by: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -127,6 +166,7 @@ pub struct UpdateTaskRequest {
     pub retry_delay_seconds: Option<i32>,
     pub parameters: Option<Value>,
     pub is_active: Option<bool>,
+    pub status: Option<TaskStatus>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

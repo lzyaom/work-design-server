@@ -1,9 +1,13 @@
 use crate::{
     error::AppError,
-    models::program::{Program, ProgramCompileResponse, ProgramExecutionUpdate, ProgramStatus},
+    models::{
+        CreateProgramRequest, ListProgramQuery, ListProgramResponse, Program,
+        ProgramCompileResponse, ProgramExecution, ProgramStatus,
+    },
     utils::python::PythonExecutor,
 };
 use chrono::{DateTime, Utc};
+use serde_json::Value;
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
 use uuid::Uuid;
@@ -11,7 +15,7 @@ use uuid::Uuid;
 pub struct ProgramService {
     pool: SqlitePool,
     python_executor: PythonExecutor,
-    execution_updates: broadcast::Sender<ProgramExecutionUpdate>,
+    execution_updates: broadcast::Sender<ProgramExecution>,
 }
 
 impl ProgramService {
@@ -31,7 +35,7 @@ impl ProgramService {
         update_program(&self.pool, id, None, None, Some(program.status.to_string())).await?;
 
         // 执行编译
-        match self.python_executor.compile(&program.content).await {
+        match self.python_executor.compile(&program.source_code).await {
             Ok(_) => {
                 program.status = ProgramStatus::Compiled;
                 update_program(&self.pool, id, None, None, Some(program.status.to_string()))
@@ -68,7 +72,7 @@ impl ProgramService {
     pub async fn run_program(
         &self,
         id: Uuid,
-    ) -> Result<broadcast::Receiver<ProgramExecutionUpdate>, AppError> {
+    ) -> Result<broadcast::Receiver<ProgramExecution>, AppError> {
         let program = get_program(&self.pool, id).await?;
 
         if program.status != ProgramStatus::Compiled {
@@ -86,23 +90,27 @@ impl ProgramService {
         let program_id = program.id;
 
         tokio::spawn(async move {
+            let sender_clone = sender.clone();
+
             let result = executor
-                .execute_with_updates(&program.content, |line, output, error| {
-                    let update = ProgramExecutionUpdate {
-                        program_id,
-                        line_number: line as i32,
-                        output,
-                        error,
+                .execute_with_updates(&program.source_code, move |line, output, error| {
+                    let update = ProgramExecution {
+                        id: program_id.clone(),
+                        line: line as i32,
+                        input: None,
+                        output: output.clone(),
+                        error: error.clone(),
                         timestamp: Utc::now(),
                     };
-                    let _ = sender.send(update);
+                    let _ = sender_clone.send(update);
                 })
                 .await;
 
             if let Err(e) = result {
-                let _ = sender.send(ProgramExecutionUpdate {
-                    program_id,
-                    line_number: -1,
+                let _ = sender.send(ProgramExecution {
+                    id: program_id.clone(),
+                    line: -1,
+                    input: None,
                     output: None,
                     error: Some(e.to_string()),
                     timestamp: Utc::now(),
@@ -116,28 +124,28 @@ impl ProgramService {
 
 pub async fn create_program(
     pool: &SqlitePool,
-    user_id: Uuid,
-    name: String,
-    content: String,
-) -> Result<Program, AppError> {
-    let id = Uuid::new_v4();
-    let program = sqlx::query_as!(
-        Program,
+    program: CreateProgramRequest,
+) -> Result<(), AppError> {
+    let status = program.status.to_string();
+    sqlx::query_as!(
+        CreateProgramRequest,
         r#"
-        INSERT INTO programs (id, user_id, name, content, status)
-        VALUES (?, ?, ?, ?, ?)
-        RETURNING id as "id: Uuid", user_id as "user_id: Uuid", name, content, status as "status: String    ",created_at as "created_at: DateTime<Utc>",updated_at as "updated_at: DateTime<Utc>"
+        INSERT INTO programs (user_id, name, description, source_code, is_active, status, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        RETURNING user_id as "user_id: Uuid", name, description, source_code, status as "status: String", is_active, metadata as "metadata: Value"
         "#,
-        id,
-        user_id,
-        name,
-        content,
-        "pending"
+        program.user_id,
+        program.name,
+        program.description,
+        program.source_code,
+        program.is_active,
+        status,
+        program.metadata
     )
     .fetch_one(pool)
     .await?;
 
-    Ok(program)
+    Ok(())
 }
 
 pub async fn get_program(pool: &SqlitePool, id: Uuid) -> Result<Program, AppError> {
@@ -147,7 +155,11 @@ pub async fn get_program(pool: &SqlitePool, id: Uuid) -> Result<Program, AppErro
             id as "id: Uuid",
             user_id as "user_id: Uuid",
             name,
-            content,
+            description,
+            source_code,
+            compiled_code,
+            is_active,
+            metadata as "metadata: Value",
             status as "status: String",
             created_at as "created_at: DateTime<Utc>",
             updated_at as "updated_at: DateTime<Utc>"
@@ -161,16 +173,18 @@ pub async fn get_program(pool: &SqlitePool, id: Uuid) -> Result<Program, AppErro
 
 pub async fn list_programs(
     pool: &SqlitePool,
-    limit: i64,
-    offset: i64,
-) -> Result<Vec<Program>, AppError> {
+    query: ListProgramQuery,
+) -> Result<Vec<ListProgramResponse>, AppError> {
+    let page_size = query.size.unwrap_or(10);
+    let page = query.page.unwrap_or(1);
+    let offset = page_size * (page - 1);
     let programs = sqlx::query_as!(
-        Program,
+        ListProgramResponse,
         r#"SELECT 
             id as "id: Uuid",
-            user_id as "user_id: Uuid",
             name,
-            content,
+            description,
+            is_active,
             status as "status: String",
             created_at as "created_at: DateTime<Utc>",
             updated_at as "updated_at: DateTime<Utc>"
@@ -178,7 +192,7 @@ pub async fn list_programs(
          ORDER BY created_at DESC
          LIMIT ? OFFSET ?
         "#,
-        limit,
+        page_size,
         offset
     )
     .fetch_all(pool)
@@ -194,7 +208,7 @@ pub async fn update_program(
     status: Option<String>,
 ) -> Result<(), AppError> {
     sqlx::query!(
-        r#"UPDATE programs SET name = COALESCE(?, name), content = COALESCE(?, content), status = COALESCE(?, status) WHERE id = ?"#,
+        r#"UPDATE programs SET name = COALESCE(?, name), source_code = COALESCE(?, source_code), status = COALESCE(?, status) WHERE id = ?"#,
         name,
         content,
         status,

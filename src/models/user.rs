@@ -21,9 +21,9 @@ impl fmt::Display for UserRole {
     }
 }
 
-impl From<&str> for UserRole {
-    fn from(s: &str) -> Self {
-        match s {
+impl From<String> for UserRole {
+    fn from(s: String) -> Self {
+        match s.as_str() {
             "admin" => UserRole::Admin,
             "guest" => UserRole::Guest,
             _ => UserRole::User,
@@ -31,11 +31,23 @@ impl From<&str> for UserRole {
     }
 }
 
-impl From<UserRole> for String {
-    fn from(value: UserRole) -> Self {
-        value.to_string()
-    }
-}
+// #[derive(Debug, Serialize, Deserialize, sqlx::Type, Clone, PartialEq)]
+// #[sqlx(type_name = "user_status", rename_all = "lowercase")]
+// pub enum UserStatus {
+//     Active,
+//     Inactive,
+//     Suspended,
+// }
+
+// impl fmt::Display for UserStatus {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         match self {
+//             UserStatus::Active => write!(f, "active"),
+//             UserStatus::Inactive => write!(f, "inactive"),
+//             UserStatus::Suspended => write!(f, "suspended"),
+//         }
+//     }
+// }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
@@ -47,14 +59,13 @@ pub struct User {
     pub salt: Option<String>,
     pub username: Option<String>,
     pub role: UserRole,
-    pub is_active: i64,
+    pub is_active: bool,
     pub last_ip: Option<String>,
     pub last_login: Option<DateTime<Utc>>,
-    pub is_online: i64,
+    pub is_online: bool,
     pub avatar: Option<String>,
     pub gender: i64,
     pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

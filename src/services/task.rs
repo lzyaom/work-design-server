@@ -1,131 +1,138 @@
 use crate::{
     error::AppError,
-    models::task::{ScheduledTask, TaskType},
-    utils::cron::validate_cron,
+    models::{CreateTaskRequest, ListTasksQuery, ScheduledTask, UpdateTaskRequest},
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use sqlx::SqlitePool;
+use sqlx::sqlite::SqlitePool;
 use uuid::Uuid;
-pub async fn create_task(
-    pool: &SqlitePool,
-    name: String,
-    cron_expression: String,
-    task_type: TaskType,
-    parameters: Option<Value>,
-) -> Result<ScheduledTask, AppError> {
-    // 验证 cron 表达式
-    if !validate_cron(&cron_expression) {
-        return Err(AppError::Validation("Invalid cron expression".to_string()));
-    }
-    let id = Uuid::new_v4();
-    let task_type_str = task_type.to_string();
-    let task = sqlx::query_as!(
-        ScheduledTask,
-        r#"
-        INSERT INTO scheduled_tasks (id, name, cron_expression, task_type, parameters)
-        VALUES (?, ?, ?, ?, ?)
-        RETURNING id as "id: Uuid", name, cron_expression, task_type as "task_type: String", parameters as "parameters: Value", is_active, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>"
-        "#,
-        id,
-        name,
-        cron_expression,
-        task_type_str,
-        parameters
-    )
-    .fetch_one(pool)
-    .await?;
 
-    Ok(task)
+pub async fn create_task(pool: &SqlitePool, task: CreateTaskRequest) -> Result<(), AppError> {
+    let task_type = task.task_type.to_string();
+
+    sqlx::query!(
+        r#"INSERT INTO tasks (
+            id, name, description, task_type, cron_expression, one_time, priority, timeout_seconds, max_retries, retry_delay_seconds, parameters, status, is_active, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        task.id,
+        task.name,
+        task.description,
+        task_type,
+        task.cron_expression,
+        task.one_time,
+        task.priority,
+        task.timeout_seconds,
+        task.max_retries,
+        task.retry_delay_seconds,
+        task.parameters,
+        task.status,
+        task.is_active,
+        task.created_by,
+    )
+    .execute(pool)
+    .await
+    .map_err(AppError::Database)?;
+
+    Ok(())
 }
 
 pub async fn update_task(
     pool: &SqlitePool,
     id: Uuid,
-    name: Option<String>,
-    cron_expression: Option<String>,
-    parameters: Option<Value>,
-    is_active: Option<bool>,
-) -> Result<ScheduledTask, AppError> {
-    if let Some(cron) = &cron_expression {
-        if !validate_cron(cron) {
-            return Err(AppError::Validation("Invalid cron expression".to_string()));
-        }
-    }
-
-    let task = sqlx::query_as!(
+    req: UpdateTaskRequest,
+) -> Result<(), AppError> {
+    sqlx::query_as!(
         ScheduledTask,
-        r#"
-        UPDATE scheduled_tasks
-        SET 
-            name = COALESCE(?, name),
+        r#"UPDATE tasks
+        SET name = COALESCE(?, name),
+            description = COALESCE(?, description),
             cron_expression = COALESCE(?, cron_expression),
+            one_time = COALESCE(?, one_time),
+            priority = COALESCE(?, priority),
+            timeout_seconds = COALESCE(?, timeout_seconds),
+            max_retries = COALESCE(?, max_retries),
+            retry_delay_seconds = COALESCE(?, retry_delay_seconds),
             parameters = COALESCE(?, parameters),
             is_active = COALESCE(?, is_active),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        RETURNING id as "id: Uuid", name, cron_expression, task_type as "task_type: String", parameters as "parameters: Value", is_active, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>"
-        "#,
-        name,
-        cron_expression,
-        parameters,
-        is_active,
+            status = COALESCE(?, status)
+        WHERE id = ?;"#,
+        req.name,
+        req.description,
+        req.cron_expression,
+        req.one_time,
+        req.priority,
+        req.timeout_seconds,
+        req.max_retries,
+        req.retry_delay_seconds,
+        req.parameters,
+        req.is_active,
+        req.status,
         id
     )
     .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Task not found".to_string()))?;
+    .await
+    .map_err(AppError::Database)?
+    .ok_or_else(|| AppError::NotFound("Task not found".to_string()));
+    Ok(())
+}
 
-    Ok(task)
+pub async fn get_task(pool: &SqlitePool, id: Uuid) -> Result<ScheduledTask, AppError> {
+    sqlx::query_as!(
+        ScheduledTask,
+        r#"SELECT
+            id as "id: Uuid", name, description, task_type, cron_expression,
+            one_time, priority as "priority: String", timeout_seconds, max_retries, retry_delay_seconds, parameters as "parameters: Value", status as "status: String", is_active, created_by as "created_by: Uuid", next_run_at as "next_run_at: DateTime<Utc>", last_run_at as "last_run_at: DateTime<Utc>", created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>"
+        FROM tasks WHERE id = ?"#,
+        id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::Database)?
+    .ok_or_else(|| AppError::NotFound("Task not found".to_string()))
 }
 
 pub async fn list_tasks(
     pool: &SqlitePool,
-    limit: i64,
-    offset: i64,
+    query: ListTasksQuery,
 ) -> Result<Vec<ScheduledTask>, AppError> {
-    let tasks = sqlx::query_as!(
+    let limit = query.size;
+    let offset = (query.page - 1) * limit;
+
+    sqlx::query_as!(
         ScheduledTask,
-        r#"
-        SELECT id as "id: Uuid", name, cron_expression, task_type as "task_type: String", parameters as "parameters: Value", is_active, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM scheduled_tasks
-        ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-        "#,
+        r#"SELECT
+                id as "id: Uuid", name, description, task_type, cron_expression,
+                one_time, priority as "priority: String", timeout_seconds, max_retries, retry_delay_seconds,
+                parameters as "parameters: Value", status as "status: String", is_active, created_by as "created_by: Uuid",
+                next_run_at as "next_run_at: DateTime<Utc>", last_run_at as "last_run_at: DateTime<Utc>", created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>"
+           FROM tasks
+           WHERE (? IS NULL OR status = ?)
+           AND (? IS NULL OR priority = ?)
+           AND is_active = ?
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?"#,
+        query.status,
+        query.status,
+        query.priority,
+        query.priority,
+        query.is_active,
         limit,
         offset
     )
     .fetch_all(pool)
-    .await?;
-
-    Ok(tasks)
+    .await
+    .map_err(AppError::Database)
 }
 
 pub async fn delete_task(pool: &SqlitePool, id: Uuid) -> Result<(), AppError> {
-    let result = sqlx::query!(
-        r#"
-        DELETE FROM scheduled_tasks WHERE id = ?
-        "#,
-        id
-    )
-    .execute(pool)
-    .await?;
+    let result = sqlx::query!("DELETE FROM tasks WHERE id = ? ", id)
+        .execute(pool)
+        .await
+        .map_err(AppError::Database)?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Task not found".to_string()));
     }
 
     Ok(())
-}
-
-pub async fn get_task(pool: &SqlitePool, id: Uuid) -> Result<ScheduledTask, AppError> {
-    let task = sqlx::query_as!(
-        ScheduledTask,
-        r#"SELECT id as "id: Uuid", name, cron_expression, task_type as "task_type: String", parameters as "parameters: Value", is_active, created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>" FROM scheduled_tasks WHERE id = ?"#,
-        id
-    )
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Task not found".to_string()))?;
-
-    Ok(task)
 }

@@ -28,14 +28,27 @@ impl fmt::Display for LogLevel {
     }
 }
 
+impl From<String> for LogLevel {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "debug" => LogLevel::Debug,
+            "warning" => LogLevel::Warning,
+            "error" => LogLevel::Error,
+            "critical" => LogLevel::Critical,
+            "event" => LogLevel::Event,
+            _ => LogLevel::Info,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Log {
     pub id: Uuid,
     pub level: LogLevel,
     pub message: String,
-    pub source: String,
+    pub source: Option<String>,
     pub metadata: Option<Value>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

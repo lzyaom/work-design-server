@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     is_active BOOLEAN NOT NULL DEFAULT 1, -- 0: 禁用, 1: 启用
     created_by TEXT NOT NULL REFERENCES users(id), -- 创建者ID
     next_run_at DATETIME, -- 下次运行时间
-    last_run_at DATETIME -- 上次运行时间
+    last_run_at DATETIME, -- 上次运行时间
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 创建时间
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP -- 更新时间
 );

@@ -83,8 +83,8 @@ pub struct ListProgramResponse {
     pub description: Option<String>,
     pub is_active: bool,
     pub status: ProgramStatus,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Clone)]

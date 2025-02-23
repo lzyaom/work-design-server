@@ -14,8 +14,8 @@ pub use self::program::{
     ProgramExecution, ProgramStatus,
 };
 pub use self::task::{
-    CreateTaskRequest, ScheduledTask, TaskAuditLog, TaskDependency, TaskExecution, TaskPriority,
-    TaskStatus, TaskType, UpdateTaskRequest,
+    CreateTaskRequest, ListTasksQuery, ScheduledTask, TaskAuditLog, TaskDependency, TaskExecution,
+    TaskPriority, TaskStatus, TaskType, UpdateTaskRequest,
 };
 pub use self::user::{
     CreateUserRequest, ListUsersQuery, UpdateUserPasswordRequest, UpdateUserRequest, User,
