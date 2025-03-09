@@ -80,7 +80,7 @@ pub async fn get_task(pool: &SqlitePool, id: Uuid) -> Result<ScheduledTask, AppE
     sqlx::query_as!(
         ScheduledTask,
         r#"SELECT
-            id as "id: Uuid", name, description, task_type, cron_expression,
+            id as "id: Uuid", name, description, task_type as "task_type: String", cron_expression,
             one_time, priority as "priority: String", timeout_seconds, max_retries, retry_delay_seconds, parameters as "parameters: Value", status as "status: String", is_active, created_by as "created_by: Uuid", next_run_at as "next_run_at: DateTime<Utc>", last_run_at as "last_run_at: DateTime<Utc>", created_at as "created_at: DateTime<Utc>", updated_at as "updated_at: DateTime<Utc>"
         FROM tasks WHERE id = ?"#,
         id
