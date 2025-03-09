@@ -1,45 +1,31 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use crate::models::message::SocketPushMessage;
 use std::sync::Arc;
-use tokio::sync::broadcast::{self, Sender};
+use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DocumentUpdate {
-    pub document_id: Uuid,
-    pub user_id: Uuid,
-    pub content: String,
-    pub cursor_position: Option<usize>,
+#[derive(Debug, Clone)]
+pub struct MessageBroadcast {
+    channel: Arc<RwLock<Sender<SocketPushMessage>>>,
 }
 
-pub struct DocumentBroadcaster {
-    channels: Arc<RwLock<HashMap<Uuid, Sender<DocumentUpdate>>>>,
-}
-
-impl DocumentBroadcaster {
-    pub fn new() -> Self {
+impl MessageBroadcast {
+    pub fn new(capacity: usize) -> Self {
+        let (tx, _) = broadcast::channel::<SocketPushMessage>(capacity);
         Self {
-            channels: Arc::new(RwLock::new(HashMap::new())),
+            channel: Arc::new(RwLock::new(tx)),
         }
     }
 
-    pub async fn get_or_create_channel(
+    pub async fn subscribe(&self) -> Receiver<SocketPushMessage> {
+        let sender = self.channel.read().await;
+        sender.subscribe()
+    }
+
+    pub async fn publish(
         &self,
-        document_id: Uuid,
-    ) -> broadcast::Sender<DocumentUpdate> {
-        let mut channels = self.channels.write().await;
-        if let Some(sender) = channels.get(&document_id) {
-            sender.clone()
-        } else {
-            let (sender, _) = broadcast::channel(100);
-            channels.insert(document_id, sender.clone());
-            sender
-        }
-    }
-
-    pub async fn remove_channel(&self, document_id: Uuid) {
-        let mut channels = self.channels.write().await;
-        channels.remove(&document_id);
+        msg: SocketPushMessage,
+    ) -> Result<usize, broadcast::error::SendError<SocketPushMessage>> {
+        let sender = self.channel.read().await;
+        sender.send(msg)
     }
 }

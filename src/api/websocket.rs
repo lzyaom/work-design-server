@@ -1,124 +1,103 @@
 use axum::{
-    extract::{Path, WebSocketUpgrade},
+    extract::{
+        ws::{Message, WebSocket},
+        WebSocketUpgrade,
+    },
     response::IntoResponse,
     Extension,
 };
 use futures::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::broadcast;
-use uuid::Uuid;
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     api::AppState,
     middleware::auth::AuthUser,
-    models::document::Document,
-    services::{
-        broadcast::DocumentUpdate,
-        document::{get_document_with_permission, update_document},
-    },
+    models::message::{ClientCommand, MessageType, SocketPushMessage},
+    services::broadcast::MessageBroadcast,
 };
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
-enum Message {
-    Update { content: String },
-    Cursor { position: usize },
-    Error { message: String },
-}
-
+// 处理 WebSocket 连接
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
-    Path(document_id): Path<Uuid>,
     Extension(state): Extension<Arc<AppState>>,
     auth: AuthUser,
 ) -> impl IntoResponse {
-    if let Ok((document, _permission)) =
-        get_document_with_permission(&state.pool, document_id, auth.user_id).await
-    {
-        let sender = state.broadcaster.get_or_create_channel(document_id).await;
-        ws.on_upgrade(move |socket| handle_socket(socket, document, auth, state.clone(), sender))
-    } else {
-        ws.on_upgrade(|socket| async {
-            let (mut sender, _) = socket.split();
-            let _ = sender
-                .send(axum::extract::ws::Message::Text(
-                    serde_json::to_string(&Message::Error {
-                        message: "No permission".to_string(),
-                    })
-                    .unwrap(),
-                ))
-                .await;
-        })
-    }
+    ws.on_upgrade(move |socket| handle_socket(socket, state.broadcaster.clone(), auth))
 }
 
-async fn handle_socket(
-    socket: axum::extract::ws::WebSocket,
-    document: Document,
-    auth: AuthUser,
-    state: Arc<AppState>,
-    broadcast_sender: broadcast::Sender<DocumentUpdate>,
-) {
-    let (mut ws_sender, mut ws_receiver) = socket.split();
-    let mut broadcast_receiver = broadcast_sender.subscribe();
+async fn handle_socket(socket: WebSocket, broadcast: Arc<MessageBroadcast>, auth: AuthUser) {
+    let (mut sender, mut receiver) = socket.split();
+
+    let mut broadcast_receiver = broadcast.subscribe().await;
+
+    let subscriptions = Arc::new(Mutex::new(HashSet::new()));
+    let subscriptions_clone = subscriptions.clone();
 
     // 创建一个任务来处理广播消息
     let send_task = tokio::spawn(async move {
-        while let Ok(update) = broadcast_receiver.recv().await {
-            // 不要发送自己的更新回自己
-            if update.user_id != auth.user_id {
-                let msg = serde_json::to_string(&Message::Update {
-                    content: update.content,
-                })
-                .unwrap();
-                if ws_sender
-                    .send(axum::extract::ws::Message::Text(msg))
-                    .await
-                    .is_err()
-                {
+        while let Ok(msg) = broadcast_receiver.recv().await {
+            if should_send(&subscriptions_clone.lock().unwrap(), &msg) {
+                let msg = serde_json::to_string(&msg).unwrap();
+                if let Err(e) = sender.send(Message::Text(msg)).await {
+                    eprintln!("Error sending message: {}", e);
                     break;
                 }
             }
         }
     });
+    let recv_task = tokio::spawn(async move {
+        while let Some(Ok(message)) = receiver.next().await {
+            {
+                let mut subs = subscriptions.lock().unwrap();
+                handle_client_message(&mut subs, &message, &auth);
+            }
+        }
+    });
 
-    // 处理接收到的消息
-    while let Some(Ok(message)) = ws_receiver.next().await {
-        if let axum::extract::ws::Message::Text(text) = message {
-            if let Ok(msg) = serde_json::from_str::<Message>(&text) {
-                match msg {
-                    Message::Update { content } => {
-                        // 更新文档
-                        if let Ok(_) =
-                            update_document(&state.pool, document.id, None, Some(content.clone()))
-                                .await
-                        {
-                            // 广播更新到其他连接
-                            let update = DocumentUpdate {
-                                document_id: document.id,
-                                user_id: auth.user_id,
-                                content,
-                                cursor_position: None,
-                            };
-                            let _ = broadcast_sender.send(update);
-                        }
+    // 等待两个任务完成
+    let _ = tokio::select! {
+        _ = send_task => {},
+        _ = recv_task => {},
+    };
+}
+
+fn should_send(subscriptions: &HashSet<MessageType>, msg: &SocketPushMessage) -> bool {
+    match msg {
+        SocketPushMessage::Document(_) => subscriptions.contains(&MessageType::Document),
+        SocketPushMessage::TaskProgress() => subscriptions.contains(&MessageType::Task),
+        SocketPushMessage::Notification() => subscriptions.contains(&MessageType::Notification),
+        SocketPushMessage::SystemMetrics() => subscriptions.contains(&MessageType::System),
+    }
+}
+
+fn handle_client_message(
+    subscriptions: &mut HashSet<MessageType>,
+    message: &Message,
+    auth: &AuthUser,
+) {
+    // 处理客户端发送的消息
+    // 例如，解析消息类型和内容，更新订阅列表等
+    if let Message::Text(text) = message {
+        if let Ok(cmd) = serde_json::from_str::<ClientCommand>(&text) {
+            match cmd {
+                ClientCommand::Subscribe(msg_type) => {
+                    subscriptions.insert(msg_type);
+                }
+                ClientCommand::Unsubscribe(msg_type) => {
+                    subscriptions.remove(&msg_type);
+                }
+                ClientCommand::SubscribeWithFilter { msg_type, filter } => {
+                    // 处理带过滤条件的订阅
+                    // 例如，根据 filter 过滤消息并订阅
+                    // 这里只是一个示例，具体实现取决于你的需求
+                    if filter == Some("admin".to_string()) && auth.is_admin() {
+                        subscriptions.insert(msg_type);
                     }
-                    Message::Cursor { position } => {
-                        let update = DocumentUpdate {
-                            document_id: document.id,
-                            user_id: auth.user_id,
-                            content: String::new(),
-                            cursor_position: Some(position),
-                        };
-                        let _ = broadcast_sender.send(update);
-                    }
-                    _ => {}
                 }
             }
         }
     }
-
-    // 清理
-    send_task.abort();
 }

@@ -119,11 +119,19 @@ impl fmt::Display for PermissionType {
 }
 
 impl From<String> for PermissionType {
-    fn from(value:String) -> Self {
+    fn from(value: String) -> Self {
         match value.as_str() {
             "write" => PermissionType::Write,
             "admin" => PermissionType::Admin,
             _ => PermissionType::Read,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentUpdateMessage {
+    pub document_id: Uuid,
+    pub user_id: Uuid,
+    pub content: String,
+    pub cursor_position: Option<usize>,
 }

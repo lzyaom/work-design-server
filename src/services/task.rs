@@ -41,7 +41,7 @@ pub async fn update_task(
     id: Uuid,
     req: UpdateTaskRequest,
 ) -> Result<(), AppError> {
-    sqlx::query_as!(
+    let _ = sqlx::query_as!(
         ScheduledTask,
         r#"UPDATE tasks
         SET name = COALESCE(?, name),

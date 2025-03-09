@@ -57,6 +57,9 @@ pub enum AppError {
 
     #[error("Multipart error: {0}")]
     Multipart(#[from] axum::extract::multipart::MultipartError),
+
+    #[error("env error")]
+    Environment(#[from] config::ConfigError),
 }
 
 impl IntoResponse for AppError {
@@ -136,6 +139,13 @@ impl IntoResponse for AppError {
                 (
                     StatusCode::BAD_REQUEST,
                     "A Multipart error occurred".to_string(),
+                )
+            }
+            AppError::Environment(ref e) => {
+                error!(error =?e, "Environment error occurred");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An environment error occurred".to_string(),
                 )
             }
         };

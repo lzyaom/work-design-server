@@ -16,7 +16,7 @@ impl EmailService {
         smtp_host: &str,
         username: &str,
         password: &str,
-        from_address: String,
+        from_address: &str,
     ) -> Result<Self, AppError> {
         let creds = Credentials::new(username.to_string(), password.to_string());
 
@@ -27,7 +27,7 @@ impl EmailService {
 
         Ok(EmailService {
             transport: Arc::new(transport),
-            from_address,
+            from_address: from_address.to_string(),
         })
     }
 

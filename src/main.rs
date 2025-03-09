@@ -1,97 +1,64 @@
-use api::AppState;
 use std::sync::Arc;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-mod api;
-mod config;
-mod db;
-mod error;
-mod handlers;
-mod middleware;
-mod models;
-mod services;
-mod utils;
-
-use crate::{
-    services::{broadcast::DocumentBroadcaster, monitor::SystemStatusBroadcaster, scheduler::Scheduler},
+use tracing::info;
+use work_designer_server::{
+    api::{init_router, AppState},
+    db::init_databases,
+    services::{broadcast::MessageBroadcast, scheduler::Scheduler},
     utils::{email::EmailService, python::PythonExecutor},
+    AppError, Config,
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "work_designer_server=debug,tower_http=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+async fn main() -> Result<(), AppError> {
+    // Initialize logging
+    tracing_subscriber::fmt::init();
 
-    // 加载配置
-    let config = config::load_config()?;
+    // Load configuration
+    let config = Config::new()?;
+    info!("Configuration loaded");
 
-    // 初始化数据库连接
-    let pool = db::init_db_sqlite(&config.database_url).await?;
+    // Initialize database connections
+    let db = init_databases(&config.database_url, &config.redis_url).await?;
+    info!("Database connections initialized");
 
-    // 初始化邮件服务
+    // Initialize  services
     let email_service = EmailService::new(
         &config.smtp_host,
         &config.smtp_username,
         &config.smtp_password,
-        format!("noreply@{}", &config.smtp_host),
+        &format!("noreply@{}", &config.smtp_host),
     )?;
+    info!("Email service initialized");
 
-    // 初始化 Python 执行器
     let python_executor = PythonExecutor::new();
+    info!("Python executor initialized");
 
-    // 初始化文档广播器
-    let broadcaster = Arc::new(DocumentBroadcaster::new());
+    let broadcaster = Arc::new(MessageBroadcast::new(100));
+    info!("Websocket broadcaster initialized");
 
-    // 初始化系统监控广播器
-    let monitor_broadcaster = Arc::new(SystemStatusBroadcaster::new());
-    monitor_broadcaster.clone().start_broadcast_task().await;
+    let scheduler = Scheduler::new(db.sqlite.clone()).await?;
+    info!("Scheduler initialized");
 
-    // 初始化调度器
-    let scheduler = Scheduler::new(pool.clone()).await?;
-    let mut scheduler_lock = scheduler.lock().await;
-
-    // 添加系统监控任务
-    scheduler_lock
-        .add_task(models::task::ScheduledTask {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: "System Monitor".to_string(),
-            cron_expression: "*/5 * * * *".to_string(), // 每5分钟执行一次
-            task_type: models::task::TaskType::SystemCleanup,
-            parameters: None,
-            is_active: 1,
-            created_at: Some(chrono::Utc::now()),
-            updated_at: Some(chrono::Utc::now()),
-        })
-        .await?;
-
-    // 启动调度器
-    scheduler_lock.start().await?;
-    drop(scheduler_lock);
-
-    // 创建应用路由
-    let app = api::create_router(AppState {
-        pool: pool.clone(),
+    // Create shared application state
+    let state = Arc::new(AppState {
+        config: config.clone(),
+        db,
         email_service,
         python_executor,
         broadcaster: broadcaster.clone(),
-        monitor_broadcaster: monitor_broadcaster.clone(),
-        config: config.clone(),
+        scheduler,
     });
 
-    // 启动服务器
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], config.server_port));
-    tracing::info!("Server listening on {}", addr);
+    // Initialize router
+    let app = init_router(state);
+    info!("Router initialized");
 
-    axum::serve(
-        tokio::net::TcpListener::bind(&addr).await?,
-        app.into_make_service(),
-    )
-    .await?;
+    // Start server
+    let addr = format!("127.0.0.1:{}", config.server_port);
+    info!("Server starting on {}", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())
 }

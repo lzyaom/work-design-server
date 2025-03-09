@@ -1,18 +1,19 @@
+use crate::{
+    config::Config,
+    db::DatabasePools,
+    handlers,
+    middleware::{monitor::track_metrics, require_auth},
+    services::{broadcast::MessageBroadcast, scheduler::Scheduler},
+    utils::{email::EmailService, python::PythonExecutor},
+};
 use axum::{
     middleware::from_fn,
     routing::{delete, get, post, put},
     Extension, Router,
 };
-use sqlx::SqlitePool;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
-
-use crate::{
-    config::Config,
-    middleware::{monitor::track_metrics, require_auth},
-    services::{broadcast::DocumentBroadcaster, monitor::SystemStatusBroadcaster},
-    utils::{email::EmailService, python::PythonExecutor},
-};
 
 mod auth;
 mod documents;
@@ -24,16 +25,17 @@ mod tasks;
 mod users;
 mod websocket;
 
+#[derive(Clone)]
 pub struct AppState {
     pub config: Config,
-    pub pool: SqlitePool,
+    pub db: DatabasePools,
     pub email_service: EmailService,
     pub python_executor: PythonExecutor,
-    pub broadcaster: Arc<DocumentBroadcaster>,
-    pub monitor_broadcaster: Arc<SystemStatusBroadcaster>,
+    pub broadcaster: Arc<MessageBroadcast>,
+    pub scheduler: Arc<Mutex<Scheduler>>,
 }
 
-pub fn create_router(state: AppState) -> Router {
+pub fn init_router(state: Arc<AppState>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -45,16 +47,16 @@ pub fn create_router(state: AppState) -> Router {
         .layer(from_fn(require_auth))
         .layer(from_fn(track_metrics))
         .layer(Extension(Arc::new(state)))
-        .fallback(crate::handlers::handle_404)
+        .fallback(handlers::handle_404)
 }
 
 fn api_router() -> Router {
     Router::new()
-        // 认证路由
+        // Auth routes
         .route("/auth/login", post(auth::login))
         .route("/auth/register", post(auth::register))
         .route("/auth/code", post(auth::send_verification_code))
-        // 用户路由
+        // User routes
         .route("/users", get(users::list_users))
         .route("/users", post(users::create_user))
         .route("/upload/avatar", post(users::upload_user_avatar))
@@ -62,19 +64,19 @@ fn api_router() -> Router {
         .route("/users/:id", get(users::get_user))
         .route("/users/:id", put(users::update_user))
         .route("/users/:id", delete(users::delete_user))
-        // 邮件路由
+        // Email routes
         .route("/email/send", post(email::send_email))
-        // 日志路由
+        // Log routes
         .route("/logs", get(logs::list_logs))
         .route("/logs/:id", get(logs::get_log))
         .route("/logs/:id", delete(logs::delete_old_logs))
-        // 任务路由
+        // Task routes
         .route("/tasks", get(tasks::task_list))
         .route("/tasks", post(tasks::create_task))
         .route("/tasks/:id", get(tasks::get_task))
         .route("/tasks/:id", put(tasks::update_task))
         .route("/tasks/:id", delete(tasks::delete_task))
-        // 文档路由
+        // Document routes
         .route("/documents", get(documents::list_documents))
         .route("/documents", post(documents::create_document))
         .route("/documents/:id", get(documents::get_document))
@@ -85,8 +87,7 @@ fn api_router() -> Router {
             post(documents::update_permissions),
         )
         .route("/monitor", get(monitor::get_status))
-        .route("/ws/monitor", get(monitor::ws_monitor))
-        // 程序路由
+        // Program routes
         .route("/program", get(program::list_programs))
         .route("/program/:id", get(program::get_program))
         .route("/program", post(program::create_program))
@@ -94,4 +95,6 @@ fn api_router() -> Router {
         .route("/program/:id", delete(program::delete_program))
         .route("/program/compile/:id", post(program::compile_program))
         .route("/program/run/:id", post(program::run_program))
+        // Websocket routes
+        .route("/ws", get(websocket::ws_handler))
 }

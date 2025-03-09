@@ -1,7 +1,9 @@
-use config::{Config as ConfigReader, ConfigError, Environment, File};
+use config::{Config as ConfigReader, Environment, File};
 use dotenv::dotenv;
 use serde::Deserialize;
 use uuid::Uuid;
+
+use crate::AppError;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -23,7 +25,7 @@ fn default_system_email() -> String {
 }
 
 impl Config {
-    pub fn new() -> Result<Self, ConfigError> {
+    pub fn new() -> Result<Self, AppError> {
         dotenv().ok();
         ConfigReader::builder()
             .add_source(Environment::default()) // 从环境变量中加载配置
@@ -31,9 +33,6 @@ impl Config {
             // .add_source(Environment::with_prefix("APP"))
             .build()?
             .try_deserialize()
+            .map_err(|e| AppError::Environment(e))
     }
-}
-
-pub fn load_config() -> Result<Config, ConfigError> {
-    Config::new()
 }

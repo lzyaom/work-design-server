@@ -1,5 +1,6 @@
 pub mod document;
 pub mod log;
+pub mod message;
 pub mod program;
 pub mod task;
 pub mod user;
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 pub use self::document::{
     CreateDocumentRequest, Document, DocumentPermission, DocumentResponse, DocumentType,
-    PermissionType, UpdateDocumentRequest, UpdatePermissionRequest,
+    DocumentUpdateMessage, PermissionType, UpdateDocumentRequest, UpdatePermissionRequest,
 };
 pub use self::log::{ListLogsQuery, Log, LogLevel};
 pub use self::program::{
